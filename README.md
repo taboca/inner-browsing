@@ -1,8 +1,30 @@
 # Inner Browsing
 
-Inner Browsing is an experimental runtime for evolving a web application without replacing its surrounding page context. A canonical applet path connects persistent state, server behavior, browser behavior, ownership, and placement. Server companions can progressively compose the application, while browser companions can send path-scoped operations back to their own server handlers.
+## Why Inner Browsing
 
-The new focus is not simply loading data into a page. It is loading and removing independently developed pieces of application behavior—paired server and client applets—with explicit lifecycles, parent-owned mount anchors, hash-addressed state, and streamed reconciliation.
+### Situation
+
+Web pages rarely remain just pages. As behavior accumulates, developers must coordinate application state, style, layout, events, server communication, and the ownership of each changing region.
+
+### Complication
+
+Adding one live element can force developers to adopt a framework, refactor the existing document into a component tree, or move page-wide state and styling into a new architecture. The cost of introducing a small capability then becomes the cost of restructuring the whole page, often around a strict hierarchy that the original HTML was never designed to express.
+
+### Question
+
+How can developers plug live, server-connected HTML elements into existing HTML while preserving the page, avoiding a full refactor, and allowing those elements to evolve without requiring one strict global hierarchy?
+
+### Answer — the goal
+
+Inner Browsing aims to make live applets attachable on top of existing HTML through small, local composition contracts. The page remains the host. Each applet can bring its own HTML, style, client behavior, server companion, state, and lifecycle, and it can be loaded or removed progressively without replacing the surrounding document. Composition should establish only the relationships needed at each mount point instead of requiring the entire application to be modeled as one rigid component tree.
+
+This is the direction of the project, not a claim that the current prototype has completed it. The implementation documented below still uses canonical `parentPath` relationships and named anchors to validate placement. Those contracts make the experiment safe and observable today; future iterations should allow applets to discover or negotiate existing HTML mount points with less structural coupling while preserving lifecycle isolation and explicit ownership.
+
+## Current prototype
+
+Inner Browsing is an experimental runtime for evolving a web application without replacing its surrounding page context. A canonical applet path currently connects persistent state, server behavior, browser behavior, ownership, and placement. Server companions can progressively compose the application, while browser companions can send path-scoped operations back to their own server handlers.
+
+The present focus is not simply loading data into a page. It is loading and removing independently developed pieces of application behavior—paired server and client applets—with explicit lifecycles, parent-owned mount anchors, hash-addressed state, and streamed reconciliation.
 
 The demonstration begins at `app/live`:
 
