@@ -1,0 +1,29 @@
+:root { color-scheme: dark; font-family: Inter, ui-sans-serif, system-ui, sans-serif; background: #0a0d12; color: #edf1f7; }
+* { box-sizing: border-box; }
+body { margin: 0; min-height: 100vh; background: radial-gradient(circle at top left, #172033, #090b10 55%); }
+header { display: flex; justify-content: space-between; gap: 2rem; padding: 1.5rem 2rem; border-bottom: 1px solid #2d3545; }
+h1, h2, h3, p { margin-top: 0; }
+h1 { margin-bottom: .3rem; font-size: 1.5rem; }
+.subtitle, .hint { color: #9ea9bb; margin-bottom: 0; }
+.snapshot { max-width: 42rem; text-align: right; }
+.snapshot code { color: #bcd0ff; word-break: break-all; font-size: .72rem; }
+main { display: grid; grid-template-columns: minmax(0, 1fr) 19rem; gap: 1.25rem; padding: 1.5rem 2rem; }
+#applet-host { min-height: 34rem; border: 1px dashed #465068; border-radius: 1rem; padding: 1rem; }
+.inspector { display: grid; align-content: start; gap: 1rem; }
+.inspector section { padding: 1rem; background: #111620; border: 1px solid #2d3545; border-radius: .8rem; }
+pre { margin: 0; white-space: pre-wrap; color: #b9c4d6; }
+.applet { border-radius: .8rem; padding: 1rem; border: 2px solid; box-shadow: 0 12px 30px #0004; animation: applet-enter 600ms cubic-bezier(.2, .8, .2, 1) both; }
+.applet-label { display: inline-block; margin-bottom: .7rem; font-size: .68rem; letter-spacing: .13em; font-weight: 800; }
+.app-applet { min-height: 30rem; background: #123d2b; border-color: #35d07f; }
+.app-content { margin-top: 1rem; }
+.live-applet { min-height: 21rem; background: #142e5c; border-color: #4f8cff; }
+.live-columns { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
+.live-column { min-height: 13rem; padding: .8rem; background: #0b1b38; border: 1px dashed #6d9fff; border-radius: .55rem; }
+.widgets-applet { min-height: 11rem; background: #584b0d; border-color: #f1cb35; color: #fff6c5; }
+.widgets-applet li { margin: .4rem 0; }
+@keyframes applet-enter {
+  from { opacity: 0; transform: translateY(12px) scale(.985); filter: saturate(.45); }
+  to { opacity: 1; transform: translateY(0) scale(1); filter: saturate(1); }
+}
+@media (prefers-reduced-motion: reduce) { .applet { animation: none; } }
+@media (max-width: 800px) { header, main { display: block; } .snapshot { margin-top: 1rem; text-align: left; } .inspector { margin-top: 1rem; } }

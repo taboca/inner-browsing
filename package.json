@@ -1,0 +1,23 @@
+{
+  "name": "labs-pattern-appcomposer-streamer-010",
+  "version": "0.10.0",
+  "private": true,
+  "type": "module",
+  "description": "Hash-addressed applet tree with paired server and browser lifecycles.",
+  "main": "server.js",
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node --watch server.js",
+    "command": "node commander/index.js",
+    "scenario": "node commander/index.js run",
+    "check": "node --check server.js && find src public commander test -name '*.js' -type f -print0 | xargs -0 -n1 node --check && node --test"
+  },
+  "dependencies": {
+    "express": "^5.1.0",
+    "socket.io": "^4.8.1",
+    "socket.io-client": "^4.8.1"
+  }
+}

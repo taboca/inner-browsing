@@ -1,0 +1,46 @@
+{
+  "name": "compose app, live, and widgets synchronously",
+  "delayMs": 1000,
+  "steps": [
+    {
+      "id": "reset",
+      "operation": "destroy",
+      "path": "app",
+      "expect": {
+        "activePaths": []
+      }
+    },
+    {
+      "id": "load-app",
+      "operation": "load",
+      "path": "app",
+      "expect": {
+        "activePaths": ["app"]
+      }
+    },
+    {
+      "id": "load-live",
+      "operation": "load",
+      "path": "app/live",
+      "expect": {
+        "activePaths": ["app", "app/live"]
+      }
+    },
+    {
+      "id": "load-widgets",
+      "operation": "load",
+      "path": "app/live/widgets",
+      "expect": {
+        "activePaths": ["app", "app/live", "app/live/widgets"]
+      }
+    },
+    {
+      "id": "destroy-live",
+      "operation": "destroy",
+      "path": "app/live",
+      "expect": {
+        "activePaths": ["app"]
+      }
+    }
+  ]
+}
