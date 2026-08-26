@@ -1,8 +1,9 @@
 import { appApplet } from './applets/app/index.js';
 import { liveApplet } from './applets/app/live/index.js';
+import { menuApplet } from './applets/app/live/menu/index.js';
 import { widgetsApplet } from './applets/app/live/widgets/index.js';
 
-const definitions = [appApplet, liveApplet, widgetsApplet];
+const definitions = [appApplet, liveApplet, menuApplet, widgetsApplet];
 
 export function createAppletRegistry() {
   const byPath = new Map(definitions.map((definition) => [definition.path, definition]));

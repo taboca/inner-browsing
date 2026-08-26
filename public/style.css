@@ -19,6 +19,9 @@ pre { margin: 0; white-space: pre-wrap; color: #b9c4d6; }
 .live-applet { min-height: 21rem; background: #142e5c; border-color: #4f8cff; }
 .live-columns { display: grid; grid-template-columns: 1fr 1fr; gap: .8rem; }
 .live-column { min-height: 13rem; padding: .8rem; background: #0b1b38; border: 1px dashed #6d9fff; border-radius: .55rem; }
+.menu-applet { min-height: 11rem; background: #641d2c; border-color: #ff5d78; color: #ffe6eb; }
+.menu-applet button { appearance: none; border: 1px solid #ff9aab; border-radius: .45rem; padding: .65rem .9rem; background: #ff4968; color: #fff; font: inherit; font-weight: 750; cursor: pointer; }
+.menu-applet button:hover { background: #ff627d; }
 .widgets-applet { min-height: 11rem; background: #584b0d; border-color: #f1cb35; color: #fff6c5; }
 .widgets-applet li { margin: .4rem 0; }
 @keyframes applet-enter {

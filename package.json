@@ -1,9 +1,9 @@
 {
-  "name": "labs-pattern-appcomposer-streamer-010",
-  "version": "0.10.0",
+  "name": "labs-pattern-appcomposer-progressive-020",
+  "version": "0.20.0",
   "private": true,
   "type": "module",
-  "description": "Hash-addressed applet tree with paired server and browser lifecycles.",
+  "description": "Progressive app composer with server-initiated composition and client-to-companion operations.",
   "main": "server.js",
   "engines": {
     "node": ">=20"

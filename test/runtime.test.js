@@ -21,3 +21,18 @@ test('server companions follow parent-first init and child-first destroy', async
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
+
+test('a server companion can progressively compose a child through appComposer', async () => {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'progressive-runtime-'));
+  try {
+    const registry = createAppletRegistry();
+    const store = createStateTreeStore({ stateRoot: directory, registry });
+    const runtime = createAppletRuntime({ registry, store, log() {} });
+    await runtime.load('app/live');
+    await runtime.idle();
+    assert.deepEqual(runtime.snapshot().activePaths, ['app', 'app/live', 'app/live/menu']);
+    assert.deepEqual(runtime.instancePaths(), ['app', 'app/live', 'app/live/menu']);
+  } finally {
+    fs.rmSync(directory, { recursive: true, force: true });
+  }
+});

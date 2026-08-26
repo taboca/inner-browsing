@@ -7,7 +7,7 @@ export function createClientApplet() {
       const label = refDoc.create('span', { className: 'applet-label', text: 'APP / LIVE' });
       const heading = refDoc.create('h2', { text: 'Live two-column layout' });
       const columns = refDoc.create('div', { className: 'live-columns' });
-      const left = refDoc.create('div', { className: 'live-column', text: 'Live surface' });
+      const left = refDoc.create('div', { className: 'live-column live-menu' });
       const right = refDoc.create('aside', { className: 'live-column live-widgets' });
       refDoc.append(left, columns);
       refDoc.append(right, columns);

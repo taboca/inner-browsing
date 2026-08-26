@@ -2,6 +2,20 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
   const instances = new Map();
   let operationQueue = Promise.resolve();
 
+  function parseCommand(command, state) {
+    if (typeof command !== 'string') throw new Error('appComposer.command expects "load path" or "destroy path"');
+    const parts = command.trim().split(/\s+/);
+    if (parts.length !== 2) throw new Error(`Invalid app composer command: ${command}`);
+    return { operation: parts[0], path: parts[1], state };
+  }
+
+  const appComposer = Object.freeze({
+    command(command, state = {}) {
+      const parsed = parseCommand(command, state);
+      return apply(parsed.operation, parsed.path, parsed.state);
+    },
+  });
+
   function appletLog(path, phase, detail = {}) {
     log(`[server:${path}] ${phase}`, detail);
   }
@@ -13,6 +27,7 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
     const context = {
       path,
       state: store.readState(path),
+      appComposer,
       log: (phase, detail) => appletLog(path, phase, detail),
     };
     const value = await instance.init?.(context);
@@ -26,6 +41,7 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
       path,
       value: record.value,
       state: record.state,
+      appComposer,
       log: (phase, detail) => appletLog(path, phase, detail),
     });
     instances.delete(path);
@@ -70,11 +86,21 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
     return current;
   }
 
+  async function idle() {
+    let pending;
+    do {
+      pending = operationQueue;
+      await pending;
+    } while (pending !== operationQueue);
+  }
+
   return {
     load: (path, state) => apply('load', path, state),
     destroy: (path) => apply('destroy', path),
     snapshot: store.snapshot,
     restore,
+    idle,
+    appComposer,
     instancePaths: () => [...instances.keys()],
   };
 }

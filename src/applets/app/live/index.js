@@ -5,6 +5,7 @@ export const liveApplet = Object.freeze({
   clientModule: '/applets/app/live/client/index.js',
   createServer: () => import('./server/index.js').then(({ createServerApplet }) => createServerApplet()),
   accepts: Object.freeze({
+    menu: 'left',
     widgets: 'right',
   }),
 });
