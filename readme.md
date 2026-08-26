@@ -1,6 +1,6 @@
 # App Composer Progressive 020
 
-This iteration starts from `labs-pattern-appcomposer-streamer-010` and adds a progressive composition loop: applet-owned server code can compose more of the application, and applet-owned browser code can ask its own server companion to perform an operation.
+This iteration starts from `labs-pattern-appcomposer-010-streamer` and adds a progressive composition loop: applet-owned server code can compose more of the application, and applet-owned browser code can ask its own server companion to perform an operation.
 
 The demonstration begins at `app/live`:
 
@@ -116,7 +116,7 @@ The important distinction is between an app command and an applet operation. `lo
 ## Run the demonstration
 
 ```bash
-cd /home/taboca/taboca-meetings/labs-pattern-appcomposer-progressive-020
+cd /home/taboca/taboca-meetings/labs-pattern-appcomposer-020-progressive
 npm install
 npm start
 ```
