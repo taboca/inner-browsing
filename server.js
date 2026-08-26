@@ -8,12 +8,13 @@ import { createStateTreeStore } from './src/stateTreeStore.js';
 import { createAppletRuntime } from './src/appletRuntime.js';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
-const port = Number(process.env.PORT) || 4410;
+const port = Number(process.env.PORT) || 4420;
 const app = express();
 const server = http.createServer(app);
 const io = new SocketIOServer(server);
 const registry = createAppletRegistry();
-const store = createStateTreeStore({ stateRoot: path.join(rootDir, 'db', 'state'), registry });
+const stateRoot = process.env.STATE_ROOT ? path.resolve(process.env.STATE_ROOT) : path.join(rootDir, 'db', 'state');
+const store = createStateTreeStore({ stateRoot, registry });
 const runtime = createAppletRuntime({ registry, store, publish: (envelope) => io.emit('navigator.snapshot', envelope) });
 
 function serialize(value) {
@@ -23,11 +24,11 @@ function serialize(value) {
 function page(snapshot) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>App Composer Streamer 010</title><link rel="stylesheet" href="/style.css"><script src="/socket.io/socket.io.js"></script></head>
-<body><header><div><h1>App Composer Streamer 010</h1><p class="subtitle">Hash-addressed state · paired lifecycles · parent-owned anchors</p></div>
+<title>App Composer Progressive 020</title><link rel="stylesheet" href="/style.css"><script src="/socket.io/socket.io.js"></script></head>
+<body><header><div><h1>App Composer Progressive 020</h1><p class="subtitle">Server composition · applet operations · progressive UI</p></div>
 <div class="snapshot"><strong>Snapshot</strong><br><code id="snapshot-hash">${snapshot.hash}</code></div></header>
 <main><div id="applet-host"></div><aside class="inspector"><section><h3>Active state tree</h3><pre id="snapshot-tree"></pre></section>
-<section><h3>Client lifecycle</h3><pre id="lifecycle-log"></pre></section><p class="hint">Try: npm run command -- load app/live/widgets</p></aside></main>
+<section><h3>Client lifecycle</h3><pre id="lifecycle-log"></pre></section><p class="hint">Open /app/live, then use “Add widgets” in the red menu.</p></aside></main>
 <script id="initial-snapshot" type="application/json">${serialize(snapshot)}</script><script type="module" src="/runtime/bootstrap.js"></script></body></html>`;
 }
 
@@ -77,6 +78,15 @@ io.on('connection', (socket) => {
       acknowledge({ ok: false, error: error.message });
     }
   });
+  socket.on('applet.operation', async (payload = {}, acknowledge = () => {}) => {
+    try {
+      const { path: appletPath, operation, data = {} } = payload;
+      const result = await runtime.operate(appletPath, operation, data);
+      acknowledge({ ok: true, ...result });
+    } catch (error) {
+      acknowledge({ ok: false, error: error.message });
+    }
+  });
 });
 
 app.use((error, _request, response, _next) => {
@@ -85,6 +95,6 @@ app.use((error, _request, response, _next) => {
 
 await runtime.restore();
 server.listen(port, () => {
-  console.log(`App Composer Streamer 010 running at http://localhost:${port}`);
+  console.log(`App Composer Progressive 020 running at http://localhost:${port}`);
   console.log(`Known applets: ${registry.paths().join(', ')}`);
 });

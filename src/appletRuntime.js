@@ -24,6 +24,7 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
     if (instances.has(path)) return;
     const definition = registry.get(path);
     const instance = await definition.createServer();
+    const operations = (await definition.createServerOperations?.()) || null;
     const context = {
       path,
       state: store.readState(path),
@@ -31,7 +32,7 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
       log: (phase, detail) => appletLog(path, phase, detail),
     };
     const value = await instance.init?.(context);
-    instances.set(path, { definition, instance, value, state: context.state });
+    instances.set(path, { definition, instance, operations, value, state: context.state });
   }
 
   async function stop(path) {
@@ -86,6 +87,22 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
     return current;
   }
 
+  async function operate(path, operation, data = {}) {
+    const record = instances.get(path);
+    if (!record) throw new Error(`Applet is not active: ${path}`);
+    if (!record.operations?.handle) throw new Error(`Applet does not accept operations: ${path}`);
+    if (typeof operation !== 'string' || !operation.trim()) throw new Error('Applet operation must be a non-empty string');
+    return record.operations.handle({
+      path,
+      operation,
+      data,
+      state: record.state,
+      value: record.value,
+      appComposer,
+      log: (phase, detail) => appletLog(path, phase, detail),
+    });
+  }
+
   async function idle() {
     let pending;
     do {
@@ -99,6 +116,7 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
     destroy: (path) => apply('destroy', path),
     snapshot: store.snapshot,
     restore,
+    operate,
     idle,
     appComposer,
     instancePaths: () => [...instances.keys()],

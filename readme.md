@@ -1,239 +1,153 @@
-# App Composer Streamer 010
+# App Composer Progressive 020
 
-App Composer Streamer is a small pattern for composing a running application from independently activated applets. One canonical path—such as `app/live/widgets`—connects persisted state, server behavior, client behavior, ownership, and placement.
+This iteration starts from `labs-pattern-appcomposer-streamer-010` and adds a progressive composition loop: applet-owned server code can compose more of the application, and applet-owned browser code can ask its own server companion to perform an operation.
 
-The central idea is simple:
-
-> Change the application tree, produce a new content hash, and stream that snapshot to runtimes that reconcile themselves.
-
-The URL may establish an initial tree, but it is not the application state. After startup, commands evolve the tree directly.
-
-## Basic architecture
-
-The system has four layers:
+The demonstration begins at `app/live`:
 
 ```text
-Command
-  load app/live/widgets
-          │
-          ▼
-State tree and Merkle snapshot
-  app → live → widgets
-          │
-          ▼
-Paired applet runtimes
-  server companion + client companion
-          │
-          ▼
-Anchored presentation
-  app.content → live.right → widgets
+load app/live
+  → app/live server init
+  → appComposer.command("load app/live/menu")
+  → red menu mounts in live.left
+
+click “Add widgets”
+  → menu client JS
+  → appletOperation.send("Add widgets")
+  → Socket.IO applet.operation envelope
+  → menu/server/operations.js
+  → appComposer.command("load app/live/widgets")
+  → widgets mount in live.right
 ```
 
-### 1. Command layer
+The URL or an external commander is therefore needed only to start the composition. Once `app/live` exists, its paired applets can progressively build the next UI state.
 
-The commander sends a small operation over Socket.IO:
+## Chapter 1 — server-initiated composition
+
+Every server companion lifecycle now receives a root-scoped `appComposer` service:
 
 ```js
-{
-  operation: 'load', // or 'destroy'
-  path: 'app/live/widgets',
-  state: {}
+init({ path, state, appComposer, log }) {
+  appComposer.command('load app/live/menu').catch((error) => {
+    log('command:error', { error: error.message });
+  });
 }
 ```
 
-`load` is additive: it ensures that the requested applet and all its ancestors are present. `destroy` removes only the selected applet and its descendants. It never implicitly removes ancestors.
+`app/live` uses that service in its `init` lifecycle. The command enters the same serialized mutation queue used by HTTP, Socket.IO, and the command-line commander. It is dispatched without awaiting it inside `init`: the current `load app/live` transaction must finish before the nested `load app/live/menu` command can run.
 
-### 2. State and hash layer
-
-Presence is persisted as a filesystem tree:
-
-```text
-db/state/
-└── app/
-    ├── root.json
-    └── live/
-        ├── root.json
-        └── widgets/
-            └── root.json
-```
-
-Each `root.json` begins with `present: true` and may hold applet-specific state. Every node receives:
-
-- a state hash derived from its canonical JSON,
-- a tree hash derived from its state hash and sorted child hashes.
-
-The top hash is derived from the root nodes. A change anywhere below therefore changes the identity of the entire snapshot, following the same essential Merkle-tree property that makes Git trees useful.
-
-This prototype stores the current working tree. The hash identifies a snapshot, but the system does not yet retain commits or historical objects.
-
-### 3. Paired runtime layer
-
-Every applet has one definition and two companions:
-
-```text
-src/applets/app/live/widgets/
-├── index.js          definition and parent contract
-├── server/index.js   server lifecycle
-└── client/index.js   browser lifecycle
-```
-
-The definition describes the stable composition contract:
+The live layout owns the placement policy:
 
 ```js
-{
-  path: 'app/live/widgets',
-  parentPath: 'app/live',
-  parentAnchor: 'right',
-  clientModule: '/applets/app/live/widgets/client/index.js',
-  createServer,
-  accepts: {}
+accepts: {
+  menu: 'left',
+  widgets: 'right',
 }
 ```
 
-The server companion is dynamically instantiated when the state node appears:
+The menu definition declares `parentPath: 'app/live'` and `parentAnchor: 'left'`. The browser runtime checks both sides of that contract before giving the menu a scoped DOM reference. The menu owns its red presentation and its HTML, including the initially rendered `Add widgets` button.
 
-```text
-create → init → active → destroy
-```
+This makes applet server code part of the app's body of work without giving it direct access to the store, Socket.IO, Express, or another applet's implementation.
 
-The client companion is dynamically imported when the streamed snapshot reaches the browser:
+## Chapter 2 — client-to-server applet operations
 
-```text
-create → init → mount → active → destroy
-```
-
-Initialization runs parent-first so every child has a host. Destruction runs child-first so a parent never removes an anchor while a child still owns mounted content inside it.
-
-### 4. Presentation and anchor layer
-
-An applet does not query the page to discover where it belongs. The runtime resolves its placement and gives it a scoped `refDoc`:
+The browser runtime gives each client companion an `appletOperation` service bound to that applet's canonical path:
 
 ```js
-refDoc.create(tag, attributes)
-refDoc.append(element, target?)
-refDoc.registerAnchor(name, element)
-refDoc.anchor(name)
+init({ refDoc, appletOperation }) {
+  button.addEventListener('click', () => {
+    appletOperation.send('Add widgets');
+  });
+}
 ```
 
-A parent owns its layout and registers named anchors. The runtime—not the child—maps a child into the accepted anchor:
+The client cannot choose a different applet identity through this lifecycle service. The runtime builds the transport envelope:
+
+```js
+{
+  path: 'app/live/menu',
+  operation: 'Add widgets',
+  data: {}
+}
+```
+
+The server accepts `applet.operation`, verifies that the target applet is active and has a declared operations companion, then routes it to:
 
 ```text
-app
-  registers: content
-
-app/live
-  mounts in: app.content
-  registers: left, right
-
-app/live/widgets
-  mounts in: app/live.right
+src/applets/app/live/menu/server/operations.js
 ```
 
-The child knows how to render itself but does not know its global DOM location. The parent knows its layout but does not instantiate child implementation code. The runtime joins those two facts.
+That handler owns the meaning of `Add widgets`:
 
-## Why the model is elegant
+```js
+async handle({ operation, appComposer }) {
+  if (operation !== 'Add widgets') throw new Error(...);
+  return appComposer.command('load app/live/widgets');
+}
+```
 
-The design gains leverage from a few shared invariants instead of many special cases:
+The operation handler receives the same root composer service as lifecycle code. It still does not manipulate the tree or another applet directly. Its command produces a normal snapshot broadcast, so the existing client reconciler mounts the widgets applet in `app/live.right`.
 
-- **One path, several meanings.** `app/live/widgets` is the state address, runtime identity, ownership chain, and command target.
-- **Parents own space; children own content.** Layout decisions remain local to the component that creates the layout.
-- **State drives lifecycles.** Companions exist because a state node exists, not because unrelated routing code happened to instantiate them.
-- **Snapshots are values.** The top hash names the entire composed state, making transitions explicit and comparable.
-- **Streaming is reconciliation.** The server broadcasts what is true; the browser calculates the minimal lifecycle change.
-- **Composition is validated.** A child can mount only when its registered parent explicitly accepts it at the declared anchor.
-- **Server code stays private.** Only declared client companion modules are exposed by HTTP.
+Unknown operations, inactive targets, and applets without an operations companion are rejected and acknowledged as errors. The menu button displays success or failure and prevents duplicate clicks while its request is pending.
 
-The resulting core loop is compact:
+## Responsibility boundaries
 
 ```text
-operation → persisted mutation → server lifecycle → new hash
-          → snapshot broadcast → client reconciliation → DOM lifecycle
+Applet definition
+  canonical path, parent contract, client module, companion factories
+
+Server lifecycle companion
+  init/destroy behavior; may issue root appComposer commands
+
+Client lifecycle companion
+  applet HTML and interaction; may send path-scoped applet operations
+
+Server operations companion
+  validates local operation names and translates them into domain/app commands
+
+App composer runtime
+  serializes load/destroy, owns state and server instances, publishes snapshots
+
+Navigator runtime
+  reconciles snapshots, resolves parent anchors, scopes DOM and operation services
 ```
 
-## Example transition
+The important distinction is between an app command and an applet operation. `load app/live/widgets` is a root-level composition command. `Add widgets` is a menu-local intent. Only the menu's server operations companion translates between them.
 
-Starting from an empty tree:
+## Run the demonstration
 
 ```bash
-npm run command -- load app
-npm run command -- load app/live
-npm run command -- load app/live/widgets
-```
-
-The presentation becomes a green root host containing a blue two-column live layout, with a yellow widget list in the right column.
-
-Removing only the widgets:
-
-```bash
-npm run command -- destroy app/live/widgets
-```
-
-produces:
-
-```text
-app
-└── live
-```
-
-The widget server companion is destroyed, a new hash is emitted, and the browser destroys only the widget client companion. The root host and live layout remain mounted.
-
-## Run
-
-```bash
-cd /home/taboca/taboca-meetings/labs-pattern-appcomposer-streamer-010
+cd /home/taboca/taboca-meetings/labs-pattern-appcomposer-progressive-020
 npm install
 npm start
 ```
 
-Open <http://localhost:4410>. Use a second terminal for one-shot commands:
+Open <http://localhost:4420/app/live>. The live server companion automatically adds the red menu on the left. Click `Add widgets`; the menu operation reaches its server companion and the yellow widgets applet appears on the right.
+
+The inherited external command paths remain available:
 
 ```bash
-npm run command -- load app/live/widgets
+npm run command -- load app/live
 npm run command -- destroy app/live/widgets
-```
-
-Or open the interactive commander:
-
-```bash
-npm run command
-```
-
-### Synchronous JSON scenarios
-
-A scenario file can execute and verify a sequence one step at a time. The next command is not emitted until the server acknowledges the current command and its expected active paths pass.
-
-Run the included example:
-
-```bash
 npm run scenario -- commander/scenarios/test1.json
 ```
 
-The file format is:
+HTTP commands remain available through `POST /api/commands`, and the current state through `GET /api/snapshot`.
+For isolated runs, `STATE_ROOT` can point the server at a different state directory and `NAVIGATOR_URL` can point the commander at a non-default server URL.
 
-```json
-{
-  "name": "compose an application",
-  "delayMs": 1000,
-  "steps": [
-    {
-      "id": "load-app",
-      "operation": "load",
-      "path": "app",
-      "expect": { "activePaths": ["app"] }
-    }
-  ]
-}
+## Verify
+
+```bash
+npm run check
 ```
 
-The runner fails immediately on a command error, a five-second acknowledgement timeout, or an `activePaths` mismatch, and exits non-zero. `delayMs` pauses only between acknowledged steps; it never overlaps operations. `test1.json` uses a one-second delay, first destroys `app` to establish a deterministic empty baseline, then visibly loads `app`, `app/live`, and `app/live/widgets` in sequence.
+The tests cover the inherited state-tree and scenario behavior plus:
 
-GET routes can establish initial state through `/app`, `/app/live`, or `/app/live/widgets`. Socket.IO commands then mutate and stream the application independently from the browser URL.
+- the `app/live` init command progressively adding `app/live/menu`;
+- dispatching `Add widgets` to the active menu server operations companion;
+- rejecting an unknown menu operation;
+- binding the browser operation service to the current applet path;
+- wiring the menu's HTML button to `Add widgets`.
 
-The same protocol is available over HTTP:
+## Intentional boundary
 
-- `GET /api/snapshot`
-- `POST /api/commands`
-
-## Current boundary
-
-This version intentionally models one shared application snapshot. The next architectural step would be to address trees by session or runtime ID, reject stale mutations with an expected-hash precondition, and retain immutable snapshot objects as commit history. Multiple server processes should also use isolated state roots or a coordinated storage lock.
+As in 010, this prototype has one shared application snapshot. Applet operation authorization is structural—active path plus declared handler—not yet user/session authorization. A production continuation should bind commands and operations to a session/runtime identity, add expected-hash preconditions, and define permission checks for each operations companion.

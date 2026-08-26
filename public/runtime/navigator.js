@@ -1,7 +1,21 @@
 import { createRefDoc } from './refDoc.js';
 
-export function createNavigator({ document, host, onLifecycle = () => {} }) {
+export function createNavigator({
+  document,
+  host,
+  onLifecycle = () => {},
+  loadClientModule = (specifier) => import(specifier),
+  sendAppletOperation = async () => { throw new Error('Applet operations are not connected'); },
+}) {
   const records = new Map();
+
+  function operationService(path) {
+    return Object.freeze({
+      send(operation, data = {}) {
+        return sendAppletOperation({ path, operation, data });
+      },
+    });
+  }
 
   async function mount(node) {
     if (records.has(node.path)) return;
@@ -9,10 +23,10 @@ export function createNavigator({ document, host, onLifecycle = () => {} }) {
     if (node.parentPath && !parent) throw new Error(`${node.path} cannot mount before ${node.parentPath}`);
     const target = parent ? parent.refDoc.anchor(node.parentAnchor) : host;
     if (!target) throw new Error(`${node.parentPath} did not register anchor ${node.parentAnchor}`);
-    const module = await import(node.clientModule);
+    const module = await loadClientModule(node.clientModule);
     const instance = module.createClientApplet();
     const refDoc = createRefDoc({ document, host: target, path: node.path });
-    const context = { path: node.path, state: node.state, refDoc };
+    const context = { path: node.path, state: node.state, refDoc, appletOperation: operationService(node.path) };
     await instance.init?.(context);
     onLifecycle({ path: node.path, phase: 'initialized', side: 'client' });
     records.set(node.path, { instance, refDoc });

@@ -4,5 +4,6 @@ export const menuApplet = Object.freeze({
   parentAnchor: 'left',
   clientModule: '/applets/app/live/menu/client/index.js',
   createServer: () => import('./server/index.js').then(({ createServerApplet }) => createServerApplet()),
+  createServerOperations: () => import('./server/operations.js').then(({ createServerOperations }) => createServerOperations()),
   accepts: Object.freeze({}),
 });

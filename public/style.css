@@ -22,6 +22,8 @@ pre { margin: 0; white-space: pre-wrap; color: #b9c4d6; }
 .menu-applet { min-height: 11rem; background: #641d2c; border-color: #ff5d78; color: #ffe6eb; }
 .menu-applet button { appearance: none; border: 1px solid #ff9aab; border-radius: .45rem; padding: .65rem .9rem; background: #ff4968; color: #fff; font: inherit; font-weight: 750; cursor: pointer; }
 .menu-applet button:hover { background: #ff627d; }
+.menu-applet button:disabled { cursor: wait; opacity: .65; }
+.operation-status { margin: .75rem 0 0; color: #ffc5cf; font-size: .82rem; }
 .widgets-applet { min-height: 11rem; background: #584b0d; border-color: #f1cb35; color: #fff6c5; }
 .widgets-applet li { margin: .4rem 0; }
 @keyframes applet-enter {

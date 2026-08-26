@@ -2,7 +2,7 @@ import { io } from 'socket.io-client';
 import readline from 'node:readline';
 import { loadScenario, runScenario } from './scenarioRunner.js';
 
-const serverUrl = process.env.NAVIGATOR_URL || 'http://localhost:4410';
+const serverUrl = process.env.NAVIGATOR_URL || 'http://localhost:4420';
 const socket = io(serverUrl, { transports: ['websocket'] });
 const args = process.argv.slice(2);
 const scenarioFilename = args[0] === 'run' ? args[1] : null;
@@ -104,7 +104,7 @@ socket.on('connect', async () => {
     return;
   }
   console.log(`Connected to ${serverUrl}`);
-  console.log('Commands: load app | load app/live | load app/live/widgets | destroy <path>');
+  console.log('Commands: load app | load app/live | load app/live/menu | load app/live/widgets | destroy <path>');
   terminal = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: 'navigator> ' });
   terminal.on('line', async (line) => {
     try {

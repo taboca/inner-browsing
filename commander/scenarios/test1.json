@@ -1,5 +1,5 @@
 {
-  "name": "compose app, live, and widgets synchronously",
+  "name": "compose app and live, then add widgets after the progressive menu",
   "delayMs": 1000,
   "steps": [
     {
@@ -31,7 +31,7 @@
       "operation": "load",
       "path": "app/live/widgets",
       "expect": {
-        "activePaths": ["app", "app/live", "app/live/widgets"]
+        "activePaths": ["app", "app/live", "app/live/menu", "app/live/widgets"]
       }
     }
   ]
