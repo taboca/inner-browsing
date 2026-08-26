@@ -2,12 +2,12 @@ import { io } from 'socket.io-client';
 import readline from 'node:readline';
 import { loadScenario, runScenario } from './scenarioRunner.js';
 
-const serverUrl = process.env.NAVIGATOR_URL || 'http://localhost:4420';
+const serverUrl = process.env.INNER_BROWSING_URL || process.env.NAVIGATOR_URL || 'http://localhost:4420';
 const socket = io(serverUrl, { transports: ['websocket'] });
 const args = process.argv.slice(2);
 const scenarioFilename = args[0] === 'run' ? args[1] : null;
 const oneShot = !scenarioFilename && args.length ? args.join(' ') : null;
-const commandTimeout = Number(process.env.NAVIGATOR_COMMAND_TIMEOUT) || 5000;
+const commandTimeout = Number(process.env.INNER_BROWSING_COMMAND_TIMEOUT || process.env.NAVIGATOR_COMMAND_TIMEOUT) || 5000;
 let batchStarted = false;
 let terminal = null;
 

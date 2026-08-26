@@ -24,11 +24,12 @@ function serialize(value) {
 function page(snapshot) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>App Composer Progressive 020</title><link rel="stylesheet" href="/style.css"><script src="/socket.io/socket.io.js"></script></head>
-<body><header><div><h1>App Composer Progressive 020</h1><p class="subtitle">Server composition · applet operations · progressive UI</p></div>
+<title>Inner Browsing</title><link rel="stylesheet" href="/style.css"><script src="/socket.io/socket.io.js"></script></head>
+<body><header><div><h1>Inner Browsing</h1><p class="subtitle">Context-preserving navigation · streamed applets · progressive composition</p></div>
 <div class="snapshot"><strong>Snapshot</strong><br><code id="snapshot-hash">${snapshot.hash}</code></div></header>
 <main><div id="applet-host"></div><aside class="inspector"><section><h3>Active state tree</h3><pre id="snapshot-tree"></pre></section>
 <section><h3>Client lifecycle</h3><pre id="lifecycle-log"></pre></section><p class="hint">Open /app/live, then use “Add widgets” in the red menu.</p></aside></main>
+<footer><small>Copyright (C) 2026 Marcio Galli · <a href="https://github.com/taboca/inner-browsing">Source</a> · <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a></small></footer>
 <script id="initial-snapshot" type="application/json">${serialize(snapshot)}</script><script type="module" src="/runtime/bootstrap.js"></script></body></html>`;
 }
 
@@ -95,6 +96,6 @@ app.use((error, _request, response, _next) => {
 
 await runtime.restore();
 server.listen(port, () => {
-  console.log(`App Composer Progressive 020 running at http://localhost:${port}`);
+  console.log(`Inner Browsing running at http://localhost:${port}`);
   console.log(`Known applets: ${registry.paths().join(', ')}`);
 });

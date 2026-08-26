@@ -1,9 +1,11 @@
 {
-  "name": "labs-pattern-appcomposer-020-progressive",
+  "name": "inner-browsing",
   "version": "0.20.0",
   "private": true,
   "type": "module",
-  "description": "Progressive app composer with server-initiated composition and client-to-companion operations.",
+  "description": "Context-preserving web navigation through server-directed, lifecycle-managed applet composition.",
+  "author": "Marcio Galli",
+  "license": "AGPL-3.0-or-later",
   "main": "server.js",
   "engines": {
     "node": ">=20"

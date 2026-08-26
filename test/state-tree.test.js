@@ -7,7 +7,7 @@ import { createAppletRegistry } from '../src/appletRegistry.js';
 import { createStateTreeStore } from '../src/stateTreeStore.js';
 
 function fixture() {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'appcomposer-streamer-010-'));
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'inner-browsing-state-'));
   const registry = createAppletRegistry();
   const store = createStateTreeStore({ stateRoot: directory, registry, now: () => '2026-08-26T00:00:00.000Z' });
   return { directory, store };

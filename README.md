@@ -1,6 +1,8 @@
-# App Composer Progressive 020
+# Inner Browsing
 
-This iteration starts from `labs-pattern-appcomposer-010-streamer` and adds a progressive composition loop: applet-owned server code can compose more of the application, and applet-owned browser code can ask its own server companion to perform an operation.
+Inner Browsing is an experimental runtime for evolving a web application without replacing its surrounding page context. A canonical applet path connects persistent state, server behavior, browser behavior, ownership, and placement. Server companions can progressively compose the application, while browser companions can send path-scoped operations back to their own server handlers.
+
+The new focus is not simply loading data into a page. It is loading and removing independently developed pieces of application behavior—paired server and client applets—with explicit lifecycles, parent-owned mount anchors, hash-addressed state, and streamed reconciliation.
 
 The demonstration begins at `app/live`:
 
@@ -208,14 +210,15 @@ The important distinction is between an app command and an applet operation. `lo
 ## Run the demonstration
 
 ```bash
-cd /home/taboca/taboca-meetings/labs-pattern-appcomposer-020-progressive
+git clone git@github.com:taboca/inner-browsing.git
+cd inner-browsing
 npm install
 npm start
 ```
 
 Open <http://localhost:4420/app/live>. The live server companion automatically adds the red menu on the left. Click `Add widgets`; the menu operation reaches its server companion and the yellow widgets applet appears on the right.
 
-The inherited external command paths remain available:
+External command paths are also available:
 
 ```bash
 npm run command -- load app/live
@@ -224,7 +227,7 @@ npm run scenario -- commander/scenarios/test1.json
 ```
 
 HTTP commands remain available through `POST /api/commands`, and the current state through `GET /api/snapshot`.
-For isolated runs, `STATE_ROOT` can point the server at a different state directory and `NAVIGATOR_URL` can point the commander at a non-default server URL.
+For isolated runs, `STATE_ROOT` can point the server at a different state directory and `INNER_BROWSING_URL` can point the commander at a non-default server URL. The older `NAVIGATOR_URL` name remains accepted for compatibility.
 
 ## Verify
 
@@ -232,7 +235,7 @@ For isolated runs, `STATE_ROOT` can point the server at a different state direct
 npm run check
 ```
 
-The tests cover the inherited state-tree and scenario behavior plus:
+The tests cover state-tree and scenario behavior plus:
 
 - the separation between nested physical ownership and stable logical module URLs;
 - the `app/live` init command progressively adding `app/live/menu`;
@@ -243,4 +246,12 @@ The tests cover the inherited state-tree and scenario behavior plus:
 
 ## Intentional boundary
 
-As in 010, this prototype has one shared application snapshot. Applet operation authorization is structural—active path plus declared handler—not yet user/session authorization. A production continuation should bind commands and operations to a session/runtime identity, add expected-hash preconditions, and define permission checks for each operations companion.
+This prototype has one shared application snapshot. Applet operation authorization is structural—active path plus declared handler—not yet user/session authorization. A production continuation should bind commands and operations to a session/runtime identity, add expected-hash preconditions, and define permission checks for each operations companion.
+
+## License
+
+Copyright (C) 2026 Marcio Galli. Inner Browsing is free software licensed under the [GNU Affero General Public License, version 3 or later](LICENSE).
+
+## Historical background
+
+The name revisits the 2003 article [“Inner-Browsing: Extending Web Browsing the Navigation Paradigm”](https://web.archive.org/web/20040619061949/http://devedge.netscape.com/viewsource/2003/inner-browsing/) by Marcio Galli, Roger Soares, and Ian Oeschger, published on 16 May 2003. That original vision preserved page context by separating contextual data loading—using techniques such as hidden iframes or `XMLHttpRequest`—from DOM binding instead of replacing the whole page; this 2026 project takes a different step, applying the context-preserving idea to server-directed composition of lifecycle-managed applets and their ongoing client-to-server operations.
