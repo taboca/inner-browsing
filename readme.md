@@ -70,10 +70,10 @@ The client cannot choose a different applet identity through this lifecycle serv
 }
 ```
 
-The server accepts `applet.operation`, verifies that the target applet is active and has a declared operations companion, then routes it to:
+The server accepts `applet.operation`, verifies that the target applet is active and has a declared operations companion, then routes it to the menu-owned handler:
 
 ```text
-src/applets/app/live/menu/server/operations.js
+src/applets/app/applets/live/applets/menu/server/operations.js
 ```
 
 That handler owns the meaning of `Add widgets`:
@@ -89,11 +89,103 @@ The operation handler receives the same root composer service as lifecycle code.
 
 Unknown operations, inactive targets, and applets without an operations companion are rejected and acknowledged as errors. The menu button displays success or failure and prevents duplicate clicks while its request is pending.
 
+## Architecture playbook — physical ownership and logical composition
+
+An applet's own implementation and its child applets are different kinds of content. They should not be siblings with indistinguishable names. Every applet package follows this shape:
+
+```text
+<applet>/
+├── index.js       definition and composition contract
+├── client/        this applet's browser companion
+├── server/        this applet's private server companions
+└── applets/       independently activated child applets
+```
+
+Applied to this example:
+
+```text
+src/applets/app/
+├── index.js
+├── client/
+├── server/
+└── applets/
+    └── live/
+        ├── index.js
+        ├── client/
+        ├── server/
+        └── applets/
+            ├── menu/
+            │   ├── index.js
+            │   ├── client/
+            │   └── server/
+            └── widgets/
+                ├── index.js
+                ├── client/
+                └── server/
+```
+
+Use `applets/` for independently activated children. Reserve a possible `src/` directory for implementation modules that belong only to the current applet; a `src/` module does not get its own state node, lifecycle, operation endpoint, or mount contract.
+
+### The filesystem does not define the application path
+
+Physical nesting expresses source ownership. The applet definition remains the source of truth for logical identity and placement:
+
+```js
+// app/index.js
+accepts: Object.freeze({
+  live: 'content',
+})
+
+// app/applets/live/index.js
+{
+  path: 'app/live',
+  parentPath: 'app',
+  parentAnchor: 'content',
+}
+```
+
+The parent-side entry `live: 'content'` means “accept the logical child segment `live` at my `content` anchor.” It does not mean that the runtime should search for a physical `./live` directory. The same rule gives `menu: 'left'` and `widgets: 'right'` their mount points inside `app/live`.
+
+This produces three related but separate addresses:
+
+```text
+Physical ownership  src/applets/app/applets/live/applets/menu
+Logical identity    app/live/menu
+Mount placement     app/live.left
+```
+
+Moving source files must not change the logical path or mount placement unless the application composition itself is changing.
+
+### Public module URL versus private source file
+
+Each definition declares two client locations:
+
+```js
+{
+  clientModule: '/applets/app/live/menu/client/index.js',
+  clientFile: fileURLToPath(new URL('./client/index.js', import.meta.url)),
+}
+```
+
+- `clientModule` is the stable logical URL streamed to browsers. It follows the canonical applet path.
+- `clientFile` is the private absolute file location used only by Express to serve that URL. It follows the physical ownership tree.
+
+The registry verifies that every `clientModule` matches its canonical applet path and that every `clientFile` exists. Snapshots include `clientModule` but never expose `clientFile`. This prevents a source reorganization from changing browser protocol addresses or leaking server filesystem paths.
+
+### Adding a child applet
+
+1. Create it under `<parent>/applets/<child-name>/` with `index.js`, `client/`, and `server/` companions as needed.
+2. Give it the canonical `path`, `parentPath`, and `parentAnchor` in its definition.
+3. Add `<child-name>: '<anchor>'` to the parent's `accepts` contract.
+4. Keep `clientModule` based on the canonical path and `clientFile` relative to the definition file.
+5. Register the definition explicitly in `appletRegistry.js`.
+6. Test both the logical mount contract and any lifecycle or operation behavior.
+
 ## Responsibility boundaries
 
 ```text
 Applet definition
-  canonical path, parent contract, client module, companion factories
+  canonical path, parent contract, public client URL, private client file, companion factories
 
 Server lifecycle companion
   init/destroy behavior; may issue root appComposer commands
@@ -142,6 +234,7 @@ npm run check
 
 The tests cover the inherited state-tree and scenario behavior plus:
 
+- the separation between nested physical ownership and stable logical module URLs;
 - the `app/live` init command progressively adding `app/live/menu`;
 - dispatching `Add widgets` to the active menu server operations companion;
 - rejecting an unknown menu operation;

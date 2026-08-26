@@ -37,7 +37,7 @@ app.use(express.static(path.join(rootDir, 'public')));
 for (const appletPath of registry.paths()) {
   const definition = registry.get(appletPath);
   app.get(definition.clientModule, (_request, response) => {
-    response.sendFile(path.join(rootDir, 'src', 'applets', ...appletPath.split('/'), 'client', 'index.js'));
+    response.sendFile(definition.clientFile);
   });
 }
 

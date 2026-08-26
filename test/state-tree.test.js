@@ -19,6 +19,7 @@ test('load creates its lineage and a deterministic Merkle snapshot', () => {
     const first = store.load('app/live/widgets').snapshot;
     assert.deepEqual(first.activePaths, ['app', 'app/live', 'app/live/widgets']);
     assert.equal(first.roots[0].children[0].children[0].path, 'app/live/widgets');
+    assert.equal('clientFile' in first.roots[0].children[0].children[0], false);
     assert.match(first.hash, /^[a-f0-9]{64}$/);
     assert.equal(store.snapshot().hash, first.hash);
     assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'app/live/root.json'))).present, true);

@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
 import { createNavigator } from '../public/runtime/navigator.js';
-import { createClientApplet as createMenuClient } from '../src/applets/app/live/menu/client/index.js';
+import { createClientApplet as createMenuClient } from '../src/applets/app/applets/live/applets/menu/client/index.js';
 
 test('navigator gives a client applet an operation sender scoped to its own path', async () => {
   let clientContext;
