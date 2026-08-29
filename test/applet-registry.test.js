@@ -10,6 +10,8 @@ test('nested source ownership preserves canonical applet paths and public module
     ['app/live', '/applets/app/live/client/index.js'],
     ['app/live/menu', '/applets/app/live/menu/client/index.js'],
     ['app/live/widgets', '/applets/app/live/widgets/client/index.js'],
+    ['app/samples', '/applets/app/samples/client/index.js'],
+    ['app/samples/chat', '/applets/app/samples/chat/client/index.js'],
   ];
 
   for (const [appletPath, clientModule] of expected) {
@@ -22,4 +24,9 @@ test('nested source ownership preserves canonical applet paths and public module
   assert.equal(menu.parentPath, 'app/live');
   assert.equal(menu.parentAnchor, 'left');
   assert.equal(menu.clientFile.endsWith(path.join('app', 'applets', 'live', 'applets', 'menu', 'client', 'index.js')), true);
+
+  const chat = registry.get('app/samples/chat');
+  assert.equal(chat.parentPath, 'app/samples');
+  assert.equal(chat.parentAnchor, 'content');
+  assert.equal(chat.clientFile.endsWith(path.join('app', 'applets', 'samples', 'applets', 'chat', 'client', 'index.js')), true);
 });

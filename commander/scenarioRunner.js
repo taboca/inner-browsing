@@ -1,5 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
+import { isComposerOperation } from '../src/composerOperations.js';
 
 function sameArray(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);
@@ -13,7 +14,7 @@ export function validateScenario(value, filename = 'scenario') {
   const steps = value.steps.map((step, index) => {
     const label = `${filename} step ${index + 1}`;
     if (!step || typeof step !== 'object') throw new Error(`${label} must be an object`);
-    if (!['load', 'destroy'].includes(step.operation)) throw new Error(`${label} has an invalid operation`);
+    if (!isComposerOperation(step.operation)) throw new Error(`${label} has an invalid operation`);
     if (typeof step.path !== 'string' || !step.path.trim()) throw new Error(`${label} requires a path`);
     const id = String(step.id || `step-${index + 1}`).trim();
     if (!id || ids.has(id)) throw new Error(`${label} has a missing or duplicate id`);

@@ -1,9 +1,13 @@
+import { isComposerOperation } from './composerOperations.js';
+
 export function createAppletRuntime({ registry, store, publish = () => {}, log = console.log }) {
   const instances = new Map();
   let operationQueue = Promise.resolve();
 
   function parseCommand(command, state) {
-    if (typeof command !== 'string') throw new Error('appComposer.command expects "load path" or "destroy path"');
+    if (typeof command !== 'string') {
+      throw new Error('appComposer.command expects "load path", "update path", or "destroy path"');
+    }
     const parts = command.trim().split(/\s+/);
     if (parts.length !== 2) throw new Error(`Invalid app composer command: ${command}`);
     return { operation: parts[0], path: parts[1], state };
@@ -61,10 +65,16 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
 
   function apply(operation, path, state = {}) {
     const work = async () => {
-      if (!['load', 'destroy'].includes(operation)) throw new Error(`Unknown operation: ${operation}`);
-      const result = operation === 'load' ? store.load(path, state) : store.destroy(path);
+      if (!isComposerOperation(operation)) throw new Error(`Unknown operation: ${operation}`);
+      const result = operation === 'load'
+        ? store.load(path, state)
+        : operation === 'update' ? store.update(path, state) : store.destroy(path);
       for (const removed of result.removed) await stop(removed);
       for (const added of result.added) await start(added);
+      for (const updated of result.updated || []) {
+        const record = instances.get(updated);
+        if (record) record.state = store.readState(updated);
+      }
       const envelope = {
         type: 'navigator.snapshot',
         operation,
@@ -113,6 +123,7 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
 
   return {
     load: (path, state) => apply('load', path, state),
+    update: (path, state) => apply('update', path, state),
     destroy: (path) => apply('destroy', path),
     snapshot: store.snapshot,
     restore,

@@ -29,7 +29,7 @@ export function createNavigator({
     const context = { path: node.path, state: node.state, refDoc, appletOperation: operationService(node.path) };
     await instance.init?.(context);
     onLifecycle({ path: node.path, phase: 'initialized', side: 'client' });
-    records.set(node.path, { instance, refDoc });
+    records.set(node.path, { instance, refDoc, stateHash: node.stateHash });
     await instance.mount?.(context);
     onLifecycle({ path: node.path, phase: 'mounted', side: 'client' });
   }
@@ -57,6 +57,20 @@ export function createNavigator({
       .filter((node) => !records.has(node.path))
       .sort((a, b) => a.path.split('/').length - b.path.split('/').length);
     for (const node of added) await mount(node);
+    const updated = [...next.values()]
+      .filter((node) => records.has(node.path) && records.get(node.path).stateHash !== node.stateHash)
+      .sort((a, b) => a.path.split('/').length - b.path.split('/').length);
+    for (const node of updated) {
+      const record = records.get(node.path);
+      await record.instance.update?.({
+        path: node.path,
+        state: node.state,
+        refDoc: record.refDoc,
+        appletOperation: operationService(node.path),
+      });
+      record.stateHash = node.stateHash;
+      onLifecycle({ path: node.path, phase: 'updated', side: 'client' });
+    }
   }
 
   return Object.freeze({ reconcile, records });

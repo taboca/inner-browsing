@@ -22,9 +22,12 @@ This is the direction of the project, not a claim that the current prototype has
 
 ## Current prototype
 
-Inner Browsing is an experimental runtime for evolving a web application without replacing its surrounding page context. A canonical applet path currently connects persistent state, server behavior, browser behavior, ownership, and placement. Server companions can progressively compose the application, while browser companions can send path-scoped operations back to their own server handlers.
+Inner Browsing is an experimental runtime for evolving a web application without replacing its surrounding page context. A canonical applet path currently connects persistent state, server behavior, browser behavior, ownership, and placement. Server companions can progressively compose the application, browser companions can send path-scoped operations back to their own server handlers, and retained applets can receive replacement state without being remounted.
 
-The present focus is not simply loading data into a page. It is loading and removing independently developed pieces of application behavior—paired server and client applets—with explicit lifecycles, parent-owned mount anchors, hash-addressed state, and streamed reconciliation.
+The present focus is not simply loading data into a page. It is loading,
+updating, and removing independently developed pieces of application
+behavior—paired server and client applets—with explicit lifecycles,
+parent-owned mount anchors, hash-addressed state, and streamed reconciliation.
 
 The demonstration begins at `app/live`:
 
@@ -113,6 +116,60 @@ The operation handler receives the same root composer service as lifecycle code.
 
 Unknown operations, inactive targets, and applets without an operations companion are rejected and acknowledged as errors. The menu button displays success or failure and prevents duplicate clicks while its request is pending.
 
+## Chapter 3 — retained applet state updates
+
+`load` and `destroy` change composition. The `update` command changes the state
+of one already-active applet while retaining its logical path, parent anchor,
+tree position, server instance, and client instance:
+
+```js
+await appComposer.command('load app/samples/chat', initialState);
+await appComposer.command('update app/samples/chat', nextState);
+await appComposer.command('destroy app/samples/chat');
+```
+
+V1 treats `nextState` as a complete replacement of applet-owned state. The
+state store preserves its framework metadata, including `present` and
+`activatedAt`; it does not shallow-merge or deep-merge application fields.
+`update` rejects unknown and inactive applets and enters the same serialized
+queue as the composition commands.
+
+The state tree hashes the new node state and publishes a normal snapshot. The
+navigator compares the retained record's earlier `stateHash` with the new
+one. Only a changed applet receives the optional client lifecycle:
+
+```js
+update({ path, state, refDoc, appletOperation }) {
+  // Reconcile this applet's owned DOM from its complete next state.
+}
+```
+
+The server instance is retained and its runtime state record is refreshed,
+but V1 does not introduce a server-side `update` callback. A no-op replacement
+succeeds without invoking a client update lifecycle.
+
+The accepted V1 contract is:
+
+1. `update` targets only a registered, active applet.
+2. Its plain-object input completely replaces applet-owned state while the
+   store preserves `present` and `activatedAt`.
+3. The operation shares the serialized `load`/`update`/`destroy` queue.
+4. The server instance is retained and its runtime state record is refreshed;
+   V1 does not introduce a server-side `update` callback.
+5. The retained client receives optional `update({ state })` only when its
+   `stateHash` changes.
+6. Invalid updates change no state and publish no successful snapshot.
+7. Runtime, appComposer, HTTP, Socket.IO, commander, and scenario surfaces use
+   the same command vocabulary.
+8. Expected-hash revisions, multi-process conflict handling, server update
+   callbacks, and repeated keyed applet instances remain later capabilities.
+
+The executable example is the registered one-user Chat at
+[`app/samples/chat`](README.sample.chat.md). It demonstrates a path-scoped
+`Send message` operation, a durable sample message append, an
+`update app/samples/chat` command, retained client reconciliation, a
+scrollable message flow, and a sender/count bar.
+
 ## Architecture playbook — physical ownership and logical composition
 
 An applet's own implementation and its child applets are different kinds of content. They should not be siblings with indistinguishable names. Every applet package follows this shape:
@@ -133,7 +190,7 @@ src/applets/app/
 ├── client/
 ├── server/
 └── applets/
-    └── live/
+    ├── live/
         ├── index.js
         ├── client/
         ├── server/
@@ -143,6 +200,15 @@ src/applets/app/
             │   ├── client/
             │   └── server/
             └── widgets/
+                ├── index.js
+                ├── client/
+                └── server/
+    └── samples/
+        ├── index.js
+        ├── client/
+        ├── server/
+        └── applets/
+            └── chat/
                 ├── index.js
                 ├── client/
                 └── server/
@@ -221,10 +287,10 @@ Server operations companion
   validates local operation names and translates them into domain/app commands
 
 App composer runtime
-  serializes load/destroy, owns state and server instances, publishes snapshots
+  serializes load/update/destroy, owns state and server instances, publishes snapshots
 
 Navigator runtime
-  reconciles snapshots, resolves parent anchors, scopes DOM and operation services
+  reconciles composition and state hashes, resolves anchors, scopes DOM and operations
 ```
 
 The important distinction is between an app command and an applet operation. `load app/live/widgets` is a root-level composition command. `Add widgets` is a menu-local intent. Only the menu's server operations companion translates between them.
@@ -240,16 +306,26 @@ npm start
 
 Open <http://localhost:4420/app/live>. The live server companion automatically adds the red menu on the left. Click `Add widgets`; the menu operation reaches its server companion and the yellow widgets applet appears on the right.
 
+Open <http://localhost:4420/app/samples/chat> for the retained-state sample.
+Send a message and observe that the Chat client reports `updated` without a
+second `initialized` or `mounted` lifecycle entry. The detailed walkthrough is
+in [README.sample.chat.md](README.sample.chat.md).
+
 External command paths are also available:
 
 ```bash
 npm run command -- load app/live
+npm run command -- load app/samples/chat
+npm run command -- update app/samples/chat '{"chat":{"messages":[],"messageCount":0,"selectedMessageId":null}}'
 npm run command -- destroy app/live/widgets
 npm run scenario -- commander/scenarios/test1.json
 ```
 
 HTTP commands remain available through `POST /api/commands`, and the current state through `GET /api/snapshot`.
-For isolated runs, `STATE_ROOT` can point the server at a different state directory and `INNER_BROWSING_URL` can point the commander at a non-default server URL. The older `NAVIGATOR_URL` name remains accepted for compatibility.
+For isolated runs, `STATE_ROOT` can point the server at a different state
+directory, `SAMPLE_DATA_ROOT` can isolate the Chat sample's durable messages,
+and `INNER_BROWSING_URL` can point the commander at a non-default server URL.
+The older `NAVIGATOR_URL` name remains accepted for compatibility.
 
 ## Verify
 
@@ -265,10 +341,18 @@ The tests cover state-tree and scenario behavior plus:
 - rejecting an unknown menu operation;
 - binding the browser operation service to the current applet path;
 - wiring the menu's HTML button to `Add widgets`.
+- replacement-state semantics and preservation of framework metadata;
+- rejection of unknown, inactive, and invalid update targets;
+- retained server and client instances without repeated initialization;
+- state-hash-scoped client updates and unchanged sibling isolation;
+- serialized `load`, `update`, and `destroy` commands;
+- rejected updates producing neither state changes nor successful snapshots;
+- durable Chat message append and selection operations; and
+- Chat-owned `messageId` target retention and `rendererKey` dispatch.
 
 ## Intentional boundary
 
-This prototype has one shared application snapshot. Applet operation authorization is structural—active path plus declared handler—not yet user/session authorization. A production continuation should bind commands and operations to a session/runtime identity, add expected-hash preconditions, and define permission checks for each operations companion.
+This prototype has one shared application snapshot. Applet operation authorization is structural—active path plus declared handler—not yet user/session authorization. A production continuation should bind commands and operations to a session/runtime identity, add expected-hash preconditions, and define permission checks for each operations companion. Registered applets can be activated dynamically, but V1 still has one instance per canonical path; repeated keyed instances and `load` commands targeting arbitrary dynamic DOM tags are not implemented.
 
 ## License
 

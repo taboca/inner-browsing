@@ -28,6 +28,21 @@ pre { margin: 0; white-space: pre-wrap; color: #b9c4d6; }
 .operation-status { margin: .75rem 0 0; color: #ffc5cf; font-size: .82rem; }
 .widgets-applet { min-height: 11rem; background: #584b0d; border-color: #f1cb35; color: #fff6c5; }
 .widgets-applet li { margin: .4rem 0; }
+.samples-applet { min-height: 27rem; background: #2d1d4f; border-color: #9d70ff; }
+.samples-content { margin-top: 1rem; }
+.chat-sample-applet { min-height: 22rem; padding: .85rem; background: #102b35; border-color: #48c6d9; }
+.chat-sample-shell { display: grid; grid-template-rows: minmax(0, 1fr) auto; min-height: 20rem; max-height: 32rem; overflow: hidden; border: 1px solid #367b87; border-radius: .7rem; background: #081c23; }
+.chat-flow { min-height: 0; margin: 0; padding: .8rem; overflow-y: auto; list-style: none; }
+.chat-message { margin: 0 0 .65rem; padding: .7rem; border: 1px solid #285662; border-radius: .6rem; background: #10313b; }
+.chat-message.is-selected { border-color: #75e4f3; box-shadow: 0 0 0 2px #75e4f326; }
+.chat-message-header, .chat-composer-summary, .chat-composer-controls { display: flex; align-items: center; justify-content: space-between; gap: .7rem; }
+.chat-message-metadata, .chat-operation-status { color: #9cc5cd; font-size: .76rem; }
+.chat-message-content { margin-top: .45rem; white-space: pre-wrap; overflow-wrap: anywhere; }
+.chat-message-action { border: 0; padding: .2rem .45rem; background: transparent; color: #8feaf7; cursor: pointer; }
+.chat-composer { display: grid; gap: .55rem; padding: .75rem; border-top: 1px solid #367b87; background: #0c252d; }
+.chat-composer-controls input { min-width: 0; flex: 1; border: 1px solid #367b87; border-radius: .45rem; padding: .65rem .7rem; background: #07191f; color: #fff; font: inherit; }
+.chat-composer-controls button { border: 1px solid #6bd4e3; border-radius: .45rem; padding: .65rem .9rem; background: #14899a; color: #fff; font: inherit; font-weight: 750; cursor: pointer; }
+.chat-composer button:disabled, .chat-composer input:disabled, .chat-message-action:disabled { cursor: wait; opacity: .6; }
 @keyframes applet-enter {
   from { opacity: 0; transform: translateY(12px) scale(.985); filter: saturate(.45); }
   to { opacity: 1; transform: translateY(0) scale(1); filter: saturate(1); }

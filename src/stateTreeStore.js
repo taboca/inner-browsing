@@ -14,6 +14,12 @@ function hash(value) {
   return crypto.createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
 }
 
+function isPlainObject(value) {
+  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
+  const prototype = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 export function normalizeAppletPath(value) {
   const normalized = String(value || '').trim().replace(/^\/+|\/+$/g, '');
   if (!normalized || !normalized.split('/').every((item) => /^[a-z][a-z0-9-]*$/.test(item))) {
@@ -38,8 +44,15 @@ export function createStateTreeStore({ stateRoot, registry, now = () => new Date
 
   function writeState(appletPath, state) {
     const filename = nodeFile(appletPath);
+    const serialized = `${JSON.stringify(stable(state), null, 2)}\n`;
     fs.mkdirSync(path.dirname(filename), { recursive: true });
-    fs.writeFileSync(filename, `${JSON.stringify(stable(state), null, 2)}\n`);
+    const temporary = `${filename}.${process.pid}.${Date.now()}.tmp`;
+    try {
+      fs.writeFileSync(temporary, serialized);
+      fs.renameSync(temporary, filename);
+    } finally {
+      if (fs.existsSync(temporary)) fs.rmSync(temporary, { force: true });
+    }
   }
 
   function activePaths() {
@@ -91,6 +104,27 @@ export function createStateTreeStore({ stateRoot, registry, now = () => new Date
     return { added, removed: [], snapshot: snapshot() };
   }
 
+  function update(appletPath, inputState = {}) {
+    const normalized = normalizeAppletPath(appletPath);
+    if (!registry.has(normalized)) throw new Error(`Unknown applet: ${normalized}`);
+    const previous = readState(normalized);
+    if (!previous?.present) throw new Error(`Cannot update inactive applet: ${normalized}`);
+    if (!isPlainObject(inputState)) throw new Error('Applet update state must be a plain object');
+    const next = {
+      ...inputState,
+      present: true,
+      activatedAt: previous.activatedAt,
+    };
+    const changed = hash(previous) !== hash(next);
+    if (changed) writeState(normalized, next);
+    return {
+      added: [],
+      removed: [],
+      updated: changed ? [normalized] : [],
+      snapshot: snapshot(),
+    };
+  }
+
   function destroy(appletPath) {
     const normalized = normalizeAppletPath(appletPath);
     if (!registry.has(normalized)) throw new Error(`Unknown applet: ${normalized}`);
@@ -102,5 +136,5 @@ export function createStateTreeStore({ stateRoot, registry, now = () => new Date
     return { added: [], removed, snapshot: snapshot() };
   }
 
-  return { load, destroy, snapshot, readState };
+  return { load, update, destroy, snapshot, readState };
 }

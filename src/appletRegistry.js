@@ -4,10 +4,17 @@ import { appApplet } from './applets/app/index.js';
 import { liveApplet } from './applets/app/applets/live/index.js';
 import { menuApplet } from './applets/app/applets/live/applets/menu/index.js';
 import { widgetsApplet } from './applets/app/applets/live/applets/widgets/index.js';
+import { samplesApplet } from './applets/app/applets/samples/index.js';
+import { chatApplet } from './applets/app/applets/samples/applets/chat/index.js';
 
-const definitions = [appApplet, liveApplet, menuApplet, widgetsApplet];
+const baseDefinitions = [appApplet, liveApplet, menuApplet, widgetsApplet, samplesApplet, chatApplet];
 
-export function createAppletRegistry() {
+export function createAppletRegistry(services = {}) {
+  const definitions = baseDefinitions.map((definition) => (
+    typeof definition.createWithServices === 'function'
+      ? definition.createWithServices(services)
+      : definition
+  ));
   const byPath = new Map(definitions.map((definition) => [definition.path, definition]));
   if (byPath.size !== definitions.length) throw new Error('Applet paths must be unique');
 

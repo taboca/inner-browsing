@@ -1,0 +1,38 @@
+{
+  "version": 1,
+  "nextSequence": 5,
+  "messages": [
+    {
+      "messageId": "message-welcome",
+      "sequence": 1,
+      "createdAt": "2026-08-29T12:00:00.000Z",
+      "actorId": "sample-self",
+      "rendererKey": "self.text",
+      "text": "This registered Chat applet is ready to demonstrate retained updates."
+    },
+    {
+      "messageId": "message-dfde33c2-17da-4890-8ccf-d90ca62571af",
+      "sequence": 2,
+      "createdAt": "2026-08-29T13:45:16.972Z",
+      "actorId": "sample-self",
+      "rendererKey": "self.text",
+      "text": "hi"
+    },
+    {
+      "messageId": "message-88c242fc-0312-412d-b1bf-458f5fbfd614",
+      "sequence": 3,
+      "createdAt": "2026-08-29T13:45:19.875Z",
+      "actorId": "sample-self",
+      "rendererKey": "self.text",
+      "text": "hello"
+    },
+    {
+      "messageId": "message-fb5e2110-18da-4f19-b73e-b0be3b34acca",
+      "sequence": 4,
+      "createdAt": "2026-08-29T13:45:22.005Z",
+      "actorId": "sample-self",
+      "rendererKey": "self.text",
+      "text": "hey"
+    }
+  ]
+}

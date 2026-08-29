@@ -6,13 +6,19 @@ import { Server as SocketIOServer } from 'socket.io';
 import { createAppletRegistry } from './src/appletRegistry.js';
 import { createStateTreeStore } from './src/stateTreeStore.js';
 import { createAppletRuntime } from './src/appletRuntime.js';
+import { createChatMessageStore } from './src/samples/chatMessageStore.js';
+import { isComposerOperation } from './src/composerOperations.js';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT) || 4420;
 const app = express();
 const server = http.createServer(app);
 const io = new SocketIOServer(server);
-const registry = createAppletRegistry();
+const sampleDataRoot = process.env.SAMPLE_DATA_ROOT
+  ? path.resolve(process.env.SAMPLE_DATA_ROOT)
+  : path.join(rootDir, 'db', 'samples');
+const chatMessageStore = createChatMessageStore({ filename: path.join(sampleDataRoot, 'chat', 'messages.json') });
+const registry = createAppletRegistry({ chatMessageStore });
 const stateRoot = process.env.STATE_ROOT ? path.resolve(process.env.STATE_ROOT) : path.join(rootDir, 'db', 'state');
 const store = createStateTreeStore({ stateRoot, registry });
 const runtime = createAppletRuntime({ registry, store, publish: (envelope) => io.emit('navigator.snapshot', envelope) });
@@ -28,7 +34,7 @@ function page(snapshot) {
 <body><header><div><h1>Inner Browsing</h1><p class="subtitle">Context-preserving navigation · streamed applets · progressive composition</p></div>
 <div class="snapshot"><strong>Snapshot</strong><br><code id="snapshot-hash">${snapshot.hash}</code></div></header>
 <main><div id="applet-host"></div><aside class="inspector"><section><h3>Active state tree</h3><pre id="snapshot-tree"></pre></section>
-<section><h3>Client lifecycle</h3><pre id="lifecycle-log"></pre></section><p class="hint">Open /app/live, then use “Add widgets” in the red menu.</p></aside></main>
+<section><h3>Client lifecycle</h3><pre id="lifecycle-log"></pre></section><p class="hint">Try <a href="/app/live">/app/live</a> or the retained-update <a href="/app/samples/chat">Chat sample</a>.</p></aside></main>
 <footer><small>Copyright (C) 2026 Marcio Galli · <a href="https://github.com/taboca/inner-browsing">Source</a> · <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a></small></footer>
 <script id="initial-snapshot" type="application/json">${serialize(snapshot)}</script><script type="module" src="/runtime/bootstrap.js"></script></body></html>`;
 }
@@ -46,7 +52,7 @@ app.get('/api/snapshot', (_request, response) => response.json({ ok: true, snaps
 app.post('/api/commands', async (request, response) => {
   try {
     const { operation, path: appletPath, state = {} } = request.body || {};
-    if (!['load', 'destroy'].includes(operation)) throw new Error(`Unknown operation: ${operation}`);
+    if (!isComposerOperation(operation)) throw new Error(`Unknown operation: ${operation}`);
     const envelope = await runtime[operation](appletPath, state);
     response.json({ ok: true, ...envelope });
   } catch (error) {
@@ -72,7 +78,7 @@ io.on('connection', (socket) => {
   socket.on('navigator.command', async (payload = {}, acknowledge = () => {}) => {
     try {
       const { operation, path: appletPath, state = {} } = payload;
-      if (!['load', 'destroy'].includes(operation)) throw new Error(`Unknown operation: ${operation}`);
+      if (!isComposerOperation(operation)) throw new Error(`Unknown operation: ${operation}`);
       const envelope = await runtime[operation](appletPath, state);
       acknowledge({ ok: true, hash: envelope.hash, activePaths: envelope.snapshot.activePaths });
     } catch (error) {

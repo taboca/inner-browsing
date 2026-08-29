@@ -7,6 +7,7 @@ test('scenario commands execute sequentially and validate active paths', async (
     name: 'sequential test',
     steps: [
       { id: 'app', operation: 'load', path: 'app', expect: { activePaths: ['app'] } },
+      { id: 'app-update', operation: 'update', path: 'app', state: { title: 'Updated' }, expect: { activePaths: ['app'] } },
       { id: 'live', operation: 'load', path: 'app/live', expect: { activePaths: ['app', 'app/live'] } },
     ],
   });
@@ -24,8 +25,15 @@ test('scenario commands execute sequentially and validate active paths', async (
       };
     },
   });
-  assert.deepEqual(order, ['start:app', 'finish:app', 'start:live', 'finish:live']);
-  assert.equal(result.passed, 2);
+  assert.deepEqual(order, [
+    'start:app',
+    'finish:app',
+    'start:app-update',
+    'finish:app-update',
+    'start:live',
+    'finish:live',
+  ]);
+  assert.equal(result.passed, 3);
 });
 
 test('scenario stops at the first failed expectation', async () => {
