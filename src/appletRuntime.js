@@ -1,8 +1,16 @@
 import { isComposerOperation } from './composerOperations.js';
 
-export function createAppletRuntime({ registry, store, publish = () => {}, log = console.log }) {
+const EMPTY_PROJECTION_MAP = Object.freeze({ version: 1, hash: '0'.repeat(64), records: Object.freeze([]) });
+
+export function createAppletRuntime({ registry, store, projectionStore = null, publish = () => {}, log = console.log }) {
   const instances = new Map();
+  const projectionInstances = new Map();
   let operationQueue = Promise.resolve();
+
+  function snapshot() {
+    const tree = store.snapshot();
+    return { ...tree, treeHash: tree.hash, projectionMap: projectionStore?.snapshot() || EMPTY_PROJECTION_MAP };
+  }
 
   function parseCommand(command, state) {
     if (typeof command !== 'string') {
@@ -16,12 +24,59 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
   const appComposer = Object.freeze({
     command(command, state = {}) {
       const parsed = parseCommand(command, state);
-      return apply(parsed.operation, parsed.path, parsed.state);
+      return applyComposer(parsed.operation, parsed.path, parsed.state);
     },
   });
 
-  function appletLog(path, phase, detail = {}) {
-    log(`[server:${path}] ${phase}`, detail);
+  function appletLog(identity, phase, detail = {}) {
+    log(`[server:${identity}] ${phase}`, detail);
+  }
+
+  function enqueue(work) {
+    const result = operationQueue.then(work, work);
+    operationQueue = result.catch(() => {});
+    return result;
+  }
+
+  function printSnapshot(current) {
+    const treeLines = [];
+    function visit(node, prefix = '') {
+      treeLines.push(`${prefix}${node.name} ${node.hash.slice(0, 12)}`);
+      node.children.forEach((child) => visit(child, `${prefix}  `));
+    }
+    current.roots.forEach((root) => visit(root));
+    log(`\n[state ${current.treeHash} projections ${current.projectionMap.hash}]`);
+    log(treeLines.length ? treeLines.join('\n') : '(empty tree)');
+  }
+
+  function publishSnapshot({ operation, path = null, projectionKey = null }) {
+    const current = snapshot();
+    const envelope = {
+      type: 'navigator.snapshot',
+      operation,
+      path,
+      projectionKey,
+      hash: current.hash,
+      treeHash: current.treeHash,
+      projectionHash: current.projectionMap.hash,
+      snapshot: current,
+    };
+    printSnapshot(current);
+    publish(envelope);
+    return envelope;
+  }
+
+  function projectionService(hostPath) {
+    if (!projectionStore) return null;
+    const withHost = (record) => ({ ...record, hostPath });
+    return Object.freeze({
+      register: (record) => applyProjection('register', withHost(record)),
+      ensure: (record) => applyProjection('ensure', withHost(record)),
+      updateState: (projectionKey, state) => applyProjection('updateState', { projectionKey, state, hostPath }),
+      updateHostData: (projectionKey, data) => applyProjection('updateHostData', { projectionKey, data, hostPath }),
+      destroy: (projectionKey) => applyProjection('destroy', { projectionKey, hostPath }),
+      list: () => projectionStore.list({ hostPath }),
+    });
   }
 
   async function start(path) {
@@ -33,6 +88,7 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
       path,
       state: store.readState(path),
       appComposer,
+      projectionManager: projectionService(path),
       log: (phase, detail) => appletLog(path, phase, detail),
     };
     const value = await instance.init?.(context);
@@ -47,24 +103,52 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
       value: record.value,
       state: record.state,
       appComposer,
+      projectionManager: projectionService(path),
       log: (phase, detail) => appletLog(path, phase, detail),
     });
     instances.delete(path);
   }
 
-  function printSnapshot(snapshot) {
-    const treeLines = [];
-    function visit(node, prefix = '') {
-      treeLines.push(`${prefix}${node.name} ${node.hash.slice(0, 12)}`);
-      node.children.forEach((child) => visit(child, `${prefix}  `));
-    }
-    snapshot.roots.forEach((root) => visit(root));
-    log(`\n[state ${snapshot.hash}]`);
-    log(treeLines.length ? treeLines.join('\n') : '(empty tree)');
+  async function startProjection(record) {
+    if (projectionInstances.has(record.projectionKey)) return;
+    const definition = registry.get(record.appletPath);
+    const instance = await definition.createServer();
+    const operations = (await definition.createServerOperations?.()) || null;
+    const context = {
+      path: record.appletPath,
+      projectionKey: record.projectionKey,
+      state: record.appletState,
+      appComposer,
+      log: (phase, detail) => appletLog(record.projectionKey, phase, detail),
+    };
+    const value = await instance.init?.(context);
+    projectionInstances.set(record.projectionKey, {
+      definition,
+      instance,
+      operations,
+      value,
+      state: record.appletState,
+      hostPath: record.hostPath,
+    });
   }
 
-  function apply(operation, path, state = {}) {
-    const work = async () => {
+  async function stopProjection(projectionKey, projection = null) {
+    const record = projectionInstances.get(projectionKey);
+    if (!record) return;
+    await record.instance.destroy?.({
+      path: record.definition.path,
+      projectionKey,
+      value: record.value,
+      state: record.state,
+      projection,
+      appComposer,
+      log: (phase, detail) => appletLog(projectionKey, phase, detail),
+    });
+    projectionInstances.delete(projectionKey);
+  }
+
+  function applyComposer(operation, path, state = {}) {
+    return enqueue(async () => {
       if (!isComposerOperation(operation)) throw new Error(`Unknown operation: ${operation}`);
       const result = operation === 'load'
         ? store.load(path, state)
@@ -75,25 +159,59 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
         const record = instances.get(updated);
         if (record) record.state = store.readState(updated);
       }
-      const envelope = {
-        type: 'navigator.snapshot',
-        operation,
-        path,
-        hash: result.snapshot.hash,
-        snapshot: result.snapshot,
-      };
-      printSnapshot(result.snapshot);
-      publish(envelope);
-      return envelope;
-    };
-    const result = operationQueue.then(work, work);
-    operationQueue = result.catch(() => {});
-    return result;
+      return publishSnapshot({ operation, path });
+    });
+  }
+
+  function applyProjection(operation, input) {
+    if (!projectionStore) return Promise.reject(new Error('Projection Manager is not configured'));
+    return enqueue(async () => {
+      let result;
+      if (operation === 'register' || operation === 'ensure') {
+        result = projectionStore[operation](input);
+        try {
+          await startProjection(result.record);
+        } catch (error) {
+          if (result.added.length) projectionStore.destroy(result.record.projectionKey);
+          throw error;
+        }
+      } else {
+        const existing = projectionStore.read(input.projectionKey);
+        if (!existing) throw new Error(`Unknown projection: ${input.projectionKey}`);
+        if (existing.hostPath !== input.hostPath) throw new Error(`Projection is not owned by ${input.hostPath}`);
+        if (operation === 'updateState') {
+          result = projectionStore.updateState(input.projectionKey, input.state);
+          const runtimeRecord = projectionInstances.get(input.projectionKey);
+          if (runtimeRecord && result.updated.length) runtimeRecord.state = result.record.appletState;
+        } else if (operation === 'updateHostData') {
+          result = projectionStore.updateHostData(input.projectionKey, input.data);
+        } else if (operation === 'destroy') {
+          result = projectionStore.destroy(input.projectionKey);
+          await stopProjection(input.projectionKey, result.record);
+        } else {
+          throw new Error(`Unknown projection operation: ${operation}`);
+        }
+      }
+      if (!result.added.length && !result.updated.length && !result.removed.length) {
+        const current = snapshot();
+        return {
+          type: 'navigator.snapshot',
+          operation: `projection.${operation}`,
+          projectionKey: result.record.projectionKey,
+          hash: current.hash,
+          treeHash: current.treeHash,
+          projectionHash: current.projectionMap.hash,
+          snapshot: current,
+        };
+      }
+      return publishSnapshot({ operation: `projection.${operation}`, projectionKey: result.record.projectionKey });
+    });
   }
 
   async function restore() {
-    const current = store.snapshot();
+    const current = snapshot();
     for (const path of current.activePaths) await start(path);
+    for (const projection of current.projectionMap.records) await startProjection(projection);
     return current;
   }
 
@@ -109,7 +227,25 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
       state: record.state,
       value: record.value,
       appComposer,
+      projectionManager: projectionService(path),
       log: (phase, detail) => appletLog(path, phase, detail),
+    });
+  }
+
+  async function operateProjection(projectionKey, operation, data = {}) {
+    const record = projectionInstances.get(projectionKey);
+    if (!record) throw new Error(`Projected applet is not active: ${projectionKey}`);
+    if (!record.operations?.handle) throw new Error(`Projected applet does not accept operations: ${projectionKey}`);
+    if (typeof operation !== 'string' || !operation.trim()) throw new Error('Projected operation must be a non-empty string');
+    return record.operations.handle({
+      path: record.definition.path,
+      projectionKey,
+      operation,
+      data,
+      state: record.state,
+      value: record.value,
+      appComposer,
+      log: (phase, detail) => appletLog(projectionKey, phase, detail),
     });
   }
 
@@ -122,14 +258,17 @@ export function createAppletRuntime({ registry, store, publish = () => {}, log =
   }
 
   return {
-    load: (path, state) => apply('load', path, state),
-    update: (path, state) => apply('update', path, state),
-    destroy: (path) => apply('destroy', path),
-    snapshot: store.snapshot,
+    load: (path, state) => applyComposer('load', path, state),
+    update: (path, state) => applyComposer('update', path, state),
+    destroy: (path) => applyComposer('destroy', path),
+    snapshot,
     restore,
     operate,
+    operateProjection,
     idle,
     appComposer,
+    projectionManagerFor: projectionService,
     instancePaths: () => [...instances.keys()],
+    projectionInstanceKeys: () => [...projectionInstances.keys()],
   };
 }

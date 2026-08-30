@@ -8,7 +8,6 @@ export const appApplet = Object.freeze({
   clientFile: fileURLToPath(new URL('./client/index.js', import.meta.url)),
   createServer: () => import('./server/index.js').then(({ createServerApplet }) => createServerApplet()),
   accepts: Object.freeze({
-    live: 'content',
     samples: 'content',
   }),
 });

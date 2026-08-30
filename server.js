@@ -6,6 +6,7 @@ import { Server as SocketIOServer } from 'socket.io';
 import { createAppletRegistry } from './src/appletRegistry.js';
 import { createStateTreeStore } from './src/stateTreeStore.js';
 import { createAppletRuntime } from './src/appletRuntime.js';
+import { createProjectionStore } from './src/projectionStore.js';
 import { createChatMessageStore } from './src/samples/chatMessageStore.js';
 import { isComposerOperation } from './src/composerOperations.js';
 
@@ -21,7 +22,16 @@ const chatMessageStore = createChatMessageStore({ filename: path.join(sampleData
 const registry = createAppletRegistry({ chatMessageStore });
 const stateRoot = process.env.STATE_ROOT ? path.resolve(process.env.STATE_ROOT) : path.join(rootDir, 'db', 'state');
 const store = createStateTreeStore({ stateRoot, registry });
-const runtime = createAppletRuntime({ registry, store, publish: (envelope) => io.emit('navigator.snapshot', envelope) });
+const projectionRoot = process.env.PROJECTION_ROOT
+  ? path.resolve(process.env.PROJECTION_ROOT)
+  : path.join(rootDir, 'db', 'projections');
+const projectionStore = createProjectionStore({ projectionRoot, registry });
+const runtime = createAppletRuntime({
+  registry,
+  store,
+  projectionStore,
+  publish: (envelope) => io.emit('navigator.snapshot', envelope),
+});
 
 function serialize(value) {
   return JSON.stringify(value).replaceAll('<', '\\u003c');
@@ -30,12 +40,8 @@ function serialize(value) {
 function page(snapshot) {
   return `<!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Inner Browsing</title><link rel="stylesheet" href="/style.css"><script src="/socket.io/socket.io.js"></script></head>
-<body><header><div><h1>Inner Browsing</h1><p class="subtitle">Context-preserving navigation · streamed applets · progressive composition</p></div>
-<div class="snapshot"><strong>Snapshot</strong><br><code id="snapshot-hash">${snapshot.hash}</code></div></header>
-<main><div id="applet-host"></div><aside class="inspector"><section><h3>Active state tree</h3><pre id="snapshot-tree"></pre></section>
-<section><h3>Client lifecycle</h3><pre id="lifecycle-log"></pre></section><p class="hint">Try <a href="/app/live">/app/live</a> or the retained-update <a href="/app/samples/chat">Chat sample</a>.</p></aside></main>
-<footer><small>Copyright (C) 2026 Marcio Galli · <a href="https://github.com/taboca/inner-browsing">Source</a> · <a href="https://www.gnu.org/licenses/agpl-3.0.html">AGPL-3.0-or-later</a></small></footer>
+<title>Inner Browsing Chat</title><link rel="stylesheet" href="/style.css"><script src="/socket.io/socket.io.js"></script></head>
+<body><main><div id="applet-host"></div></main>
 <script id="initial-snapshot" type="application/json">${serialize(snapshot)}</script><script type="module" src="/runtime/bootstrap.js"></script></body></html>`;
 }
 
@@ -69,7 +75,15 @@ app.get(/^\/(app(?:\/[a-z][a-z0-9-]*)*)$/, async (request, response, next) => {
     next(error);
   }
 });
-app.get('/', (_request, response) => response.send(page(runtime.snapshot())));
+app.get('/', async (_request, response, next) => {
+  try {
+    await runtime.load('app/samples/chat');
+    await runtime.idle();
+    response.send(page(runtime.snapshot()));
+  } catch (error) {
+    next(error);
+  }
+});
 
 io.on('connection', (socket) => {
   socket.on('navigator.subscribe', (_payload = {}, acknowledge = () => {}) => {
@@ -80,7 +94,12 @@ io.on('connection', (socket) => {
       const { operation, path: appletPath, state = {} } = payload;
       if (!isComposerOperation(operation)) throw new Error(`Unknown operation: ${operation}`);
       const envelope = await runtime[operation](appletPath, state);
-      acknowledge({ ok: true, hash: envelope.hash, activePaths: envelope.snapshot.activePaths });
+      acknowledge({
+        ok: true,
+        hash: envelope.hash,
+        projectionHash: envelope.projectionHash,
+        activePaths: envelope.snapshot.activePaths,
+      });
     } catch (error) {
       acknowledge({ ok: false, error: error.message });
     }
@@ -89,6 +108,15 @@ io.on('connection', (socket) => {
     try {
       const { path: appletPath, operation, data = {} } = payload;
       const result = await runtime.operate(appletPath, operation, data);
+      acknowledge({ ok: true, ...result });
+    } catch (error) {
+      acknowledge({ ok: false, error: error.message });
+    }
+  });
+  socket.on('projection.operation', async (payload = {}, acknowledge = () => {}) => {
+    try {
+      const { projectionKey, operation, data = {} } = payload;
+      const result = await runtime.operateProjection(projectionKey, operation, data);
       acknowledge({ ok: true, ...result });
     } catch (error) {
       acknowledge({ ok: false, error: error.message });

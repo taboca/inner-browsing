@@ -105,7 +105,7 @@ socket.on('connect', async () => {
     return;
   }
   console.log(`Connected to ${serverUrl}`);
-  console.log('Commands: load app | load app/live | load app/samples/chat | update <path> <json> | destroy <path>');
+  console.log('Commands: load app/samples/chat | update <path> <json> | destroy <path>');
   terminal = readline.createInterface({ input: process.stdin, output: process.stdout, prompt: 'navigator> ' });
   terminal.on('line', async (line) => {
     try {

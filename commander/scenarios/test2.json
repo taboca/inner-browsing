@@ -1,45 +1,30 @@
 {
-  "name": "compose and tear down the progressive live subtree",
-  "delayMs": 1000,
+  "name": "update and tear down the Chat case",
+  "delayMs": 250,
   "steps": [
     {
-      "id": "reset",
+      "id": "load-chat",
+      "operation": "load",
+      "path": "app/samples/chat",
+      "expect": {
+        "activePaths": ["app", "app/samples", "app/samples/chat"]
+      }
+    },
+    {
+      "id": "update-chat",
+      "operation": "update",
+      "path": "app/samples/chat",
+      "state": { "chat": { "selectedMessageId": null, "lastAction": null } },
+      "expect": {
+        "activePaths": ["app", "app/samples", "app/samples/chat"]
+      }
+    },
+    {
+      "id": "destroy-chat",
       "operation": "destroy",
-      "path": "app",
+      "path": "app/samples/chat",
       "expect": {
-        "activePaths": []
-      }
-    },
-    {
-      "id": "load-app",
-      "operation": "load",
-      "path": "app",
-      "expect": {
-        "activePaths": ["app"]
-      }
-    },
-    {
-      "id": "load-live",
-      "operation": "load",
-      "path": "app/live",
-      "expect": {
-        "activePaths": ["app", "app/live"]
-      }
-    },
-    {
-      "id": "load-widgets",
-      "operation": "load",
-      "path": "app/live/widgets",
-      "expect": {
-        "activePaths": ["app", "app/live", "app/live/menu", "app/live/widgets"]
-      }
-    },
-    {
-      "id": "destroy-live",
-      "operation": "destroy",
-      "path": "app/live",
-      "expect": {
-        "activePaths": ["app"]
+        "activePaths": ["app", "app/samples"]
       }
     }
   ]

@@ -1,268 +1,158 @@
-# Sample · Retained one-user Chat
+# Sample · Chat with projected Post-it applets
 
 ## Purpose
 
-The `app/samples/chat` applet is the executable use case for Inner Browsing's
-`update` command. It demonstrates how one explicitly registered applet can be
-activated dynamically, perform durable server work through a path-scoped
-operation, and receive complete replacement state without recreating its
-server or client companion.
+`app/samples/chat` is the default executable case for both retained canonical
+updates and projected applet materialization. It demonstrates three ownership
+layers without duplicating their state:
 
-The sample is deliberately small:
+| Layer | Owns |
+| --- | --- |
+| Chat message store | durable application messages |
+| canonical Chat state | selection and last-action state participating in the composition tree |
+| Projection Map | rehydratable Post-it instance identity, placement metadata, and projected `appletState` |
 
-* one local user, `sample-self`;
-* text messages of at most 500 characters;
-* one durable JSON message store;
-* one `self.text` renderer;
-* one optional selected-message action; and
-* no authentication, presence, typing feed, edits, attachments, or multiple
-  Chat participants.
+The sample has one local actor, plain text of at most 500 characters, durable
+JSON storage, and no authentication, presence, edits, attachments, or
+multi-user isolation.
 
-## Run the sample
+## Run
 
 ```bash
 npm install
 npm start
 ```
 
-Open <http://localhost:4420/app/samples/chat>.
+Open <http://localhost:4420/>. The root loads `app/samples/chat`; the explicit
+route <http://localhost:4420/app/samples/chat> remains available.
 
-If another demonstration subtree is already active in the persisted state,
-it may remain visible beside the sample. The framework intentionally preserves
-active context. To start from an empty tree, use the commander before opening
-the Chat URL:
-
-```bash
-npm run command -- destroy app
-```
-
-The checked-in seed message lives at:
-
-```text
-db/samples/chat/messages.json
-```
-
-For an isolated run, point both persistent surfaces at temporary directories:
+The checked-in messages live at `db/samples/chat/messages.json`. Canonical
+state, projections, and sample data can be isolated independently:
 
 ```bash
 STATE_ROOT=/tmp/inner-browsing-state \
+PROJECTION_ROOT=/tmp/inner-browsing-projections \
 SAMPLE_DATA_ROOT=/tmp/inner-browsing-samples \
 npm start
 ```
 
-`STATE_ROOT` contains active applet state. `SAMPLE_DATA_ROOT` contains durable
-sample messages. They have deliberately different ownership.
+## Definitions and instances
 
-## Registered composition
-
-The logical tree is:
+The canonical tree is:
 
 ```text
-app
-└── app/samples
-    └── app/samples/chat
+app → app/samples → app/samples/chat
 ```
 
-Its physical ownership is:
+`app/samples/chat/widget-postit` is a registered projected definition. Its
+source is nested physically under Chat because it is a Chat-owned sample
+widget, but it has no canonical parent or anchor. It cannot be loaded into the
+canonical tree.
 
-```text
-src/applets/app/applets/samples/
-├── index.js
-├── client/
-├── server/
-└── applets/
-    └── chat/
-        ├── index.js
-        ├── client/
-        └── server/
-```
-
-Both applets are explicit registry definitions. `app` accepts `samples` at its
-`content` anchor, and `app/samples` accepts `chat` at its own `content` anchor.
-The command:
-
-```text
-load app/samples/chat
-```
-
-creates the missing registered lineage and starts one server/client instance
-for every newly active canonical path.
-
-Registration does not prevent dynamic activation. It defines which applet may
-be activated, its owner, and its legal mount point. V1 does not create multiple
-keyed instances of the same definition: there is one active instance for the
-canonical path `app/samples/chat`.
-
-## Two-region layout
-
-The Chat client owns one behavior-bearing surface with two vertical regions:
-
-```text
-┌─────────────────────────────────┐
-│ message flow                    │
-│                                 │
-│ scrollable ordered messages     │
-│                                 │
-├─────────────────────────────────┤
-│ N messages                      │
-│ [Write a message…]       [Send] │
-└─────────────────────────────────┘
-```
-
-CSS grid uses `minmax(0, 1fr) auto`. The flow scrolls while the composer stays
-in the lower row of the applet-owned panel. It is not fixed to the browser
-viewport.
-
-## Initialization and ordinary update
-
-Loading creates an active Chat node before its server companion reads the
-sample message store. The `init` lifecycle then enqueues the same ordinary
-active-node update used after later operations:
-
-```text
-load app/samples/chat
-  → Chat node becomes active
-  → Chat server init reads durable messages
-  → server creates complete initial applet view state
-  → update app/samples/chat
-```
-
-This can produce two progressive snapshots:
-
-```text
-snapshot 1  Chat exists with bootstrap state
-snapshot 2  same Chat instance contains its server-resolved view state
-```
-
-The phrase **initial applet view state** is intentional. Inner Browsing
-`update` does not define a formal Projection, Projection Mapping, Projection
-Registration, or Projection Manager. An application may later supply the
-output of such a projection as applet state, but projection calculation and
-state delivery remain separate layers.
-
-## Sending a message
-
-The browser draft remains local until the form is submitted:
-
-```js
-appletOperation.send('Send message', { text });
-```
-
-The navigator binds this operation sender to `app/samples/chat`; the client
-cannot substitute another applet path. The server flow is:
-
-```text
-Send message intent
-  → app/samples/chat operations companion
-  → validate bounded text
-  → append durable message with server identity, sequence, actor, and time
-  → read the complete ordered message list
-  → construct complete Chat applet view state
-  → update app/samples/chat
-  → publish normal navigator.snapshot
-```
-
-The resulting state shape is application-owned:
+Each message gets a record like:
 
 ```js
 {
-  chat: {
-    messages: [
-      {
-        messageId: 'message-...',
-        sequence: 2,
-        createdAt: '2026-08-29T13:00:00.000Z',
-        actorId: 'sample-self',
-        rendererKey: 'self.text',
-        text: 'Hello'
-      }
-    ],
-    messageCount: 2,
-    selectedMessageId: null
-  }
+  projectionKey: `chat.message.${messageId}.widget-postit`,
+  hostPath: 'app/samples/chat',
+  targetKey: messageId,
+  appletPath: 'app/samples/chat/widget-postit',
+  hostData: { messageId, sequence, actorId, createdAt },
+  appletState: { text },
+  persistence: 'durable'
 }
 ```
 
-V1 replacement semantics mean the server supplies the complete `chat` value
-on every update. Stale applet-owned fields do not survive accidentally. The
-state store preserves only framework metadata such as `present` and
-`activatedAt` from the previous node.
+`projectionKey`, rather than the applet path or a state hash, identifies the
+instance. Many messages share the same definition. Multiple messages with
+the same text also share an `appletStateHash`, but remain different instances.
 
-## From applet state to the proper message element
+## Initialization and rehydration
 
-Inner Browsing stops at applet delivery:
+On the first load, the Chat server reads durable messages and calls
+`projectionManager.ensure` for each one. Existing durable projections are
+left intact; missing seed or migration records are created. The canonical
+Chat state is then updated with only its own selected-message and last-action
+values.
 
-```text
-snapshot contains changed app/samples/chat stateHash
-  → navigator finds the retained app/samples/chat client record
-  → navigator calls Chat update({ state })
-```
-
-The framework does not inspect the message array and does not choose a DOM
-element. The Chat client owns item reconciliation:
+On restart or browser reload:
 
 ```text
-messageId → browser-local DOM content target
-rendererKey → bounded browser-local rendering function
+projection record restores projectionKey + definition + appletState + slot
+  → projected server companion is restored by projectionKey
+  → Chat renders its current visible shells
+  → Chat commits projectionKey-to-element bindings
+  → navigator materializes Post-it clients into those elements
 ```
 
-For each state replacement, the client:
+No DOM reference is serialized. Off-page records remain durable pending
+state and materialize if a later page binds them.
 
-1. sorts messages by server sequence;
-2. removes targets whose IDs disappeared;
-3. reuses an existing shell when `messageId` is already mapped;
-4. creates a shell and content target for a new ID;
-5. selects the bounded renderer through `rendererKey`;
-6. appends shells in authoritative order; and
-7. updates the count shown in the lower bar.
+## Sending a message
 
-No DOM reference is stored in JSON or sent to the server.
+The draft remains browser-local until Chat sends its path-scoped operation:
 
-## Per-message operation
-
-Each message shell includes a `Select` action. It demonstrates item identity
-inside an applet-scoped operation:
-
-```js
-appletOperation.send('Select message', {
-  messageId: 'message-2',
-});
+```text
+Send message
+  → validate text
+  → append the durable application message
+  → register its durable Post-it projection
+  → update retained canonical Chat last-action state
+  → publish serialized snapshots
 ```
 
-The operation still reaches the `app/samples/chat` server companion. The
-server validates that the message exists and replaces Chat state with
-`selectedMessageId`. The retained client then marks the matching shell.
+The Projection Map drives count, ordering, and visible message metadata, so
+projected content is not duplicated inside canonical Chat state. A later edit
+would use `projectionManager.updateState(projectionKey, { text })`; that would
+change `projectionHash` while leaving `treeHash` unchanged.
 
-This is different from dynamically loading an applet into the message DOM
-element. Current Inner Browsing supports dynamic activation of registered
-canonical applets, not arbitrary repeated instances addressed by dynamic DOM
-tags. Such a feature would need a separate instance-identity and dynamic-mount
-proposal.
+## Browser ownership and pagination
 
-## What the sample proves
+Chat owns each green rounded `<li>`, its header, metadata, Select button, and
+empty content target. The projected Post-it owns only the subtree inside that
+target:
 
-The automated checks prove:
+```text
+li.chat-message                          Chat
+  div.chat-message-header                Chat
+  div.chat-message-content               Chat binding target
+    article.projected-widget-postit      Post-it
+      em                                 Post-it italic text
+```
 
-* `app/samples/chat` creates its registered lineage;
-* initialization supplies server-read applet view state through `update`;
-* `Send message` appends a durable record;
-* state and snapshot hashes change while active paths and instances remain;
-* `Select message` carries item identity through the scoped Chat operation;
-* the client retains an existing message shell across state updates;
-* a new message creates a new target;
-* `rendererKey` selects bounded inner rendering; and
-* blank and over-limit messages are rejected.
+Chat renders the ten most recent records. It retains shells by `messageId`
+and commits one exact binding frame after each render. Moving from records
+91–100 to 92–101 retains nine projected clients, removes the local client for
+91, and materializes 101. The durable projection for 91 is not destroyed and
+can be rebound later.
 
-Run the complete suite with:
+Selection is still an ordinary Chat operation. It updates canonical Chat
+state and its tree hash without rewriting Post-it state.
+
+## Hash behavior
+
+The navigation envelope exposes independent domains:
+
+```text
+snapshot.hash  = treeHash
+treeHash       canonical composition and state
+projectionHash projected identity, state, and placement records
+```
+
+There is no combined navigation hash. The navigator reconciles every
+published snapshot by the two record sets, which keeps projection churn from
+changing the canonical routing contract. `projectionHash` is still exercised
+by every projection registration or projected-state update and is useful to
+projection-aware consumers as a compact change detector.
+
+## Verification
 
 ```bash
 npm run check
 ```
 
-## Current boundary
-
-The sample demonstrates the runtime contract, not a production Chat system.
-It has one process, one shared snapshot, one sample user, synchronous JSON
-persistence, and no expected-hash conflict handling. The durable message file
-is application/sample truth; `db/state/app/samples/chat/root.json` is retained
-applet state and can be reconstructed from the messages.
+Coverage includes durable/runtime restoration, JSON validation, equal state
+hashes with distinct projection identities, independent hash evolution,
+server companion retention and cleanup, exact browser binding frames,
+last-ten reconciliation, projected italic content, Chat validation, and the
+existing canonical load/update/destroy and commander behavior.

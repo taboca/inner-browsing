@@ -1,5 +1,5 @@
-function orderedMessages(state) {
-  return [...(state.chat?.messages || [])].sort((left, right) => left.sequence - right.sequence);
+function orderedProjections(projectionMap) {
+  return [...projectionMap.list()].sort((left, right) => left.hostData.sequence - right.hostData.sequence);
 }
 
 export function createClientApplet() {
@@ -11,16 +11,14 @@ export function createClientApplet() {
   let sendButton;
   let status;
   let appletOperation;
-  const recordsByMessageId = new Map();
-  const renderersByKey = new Map([
-    ['self.text', (target, message) => { target.textContent = message.text; }],
-  ]);
+  const recordsByProjectionKey = new Map();
 
-  function createMessageRecord(message, refDoc) {
+  function createMessageRecord(projection, refDoc) {
+    const message = projection.hostData;
     const shell = refDoc.create('li', {
       className: 'chat-message',
       'data-message-id': message.messageId,
-      'data-renderer-key': message.rendererKey,
+      'data-projection-key': projection.projectionKey,
     });
     const header = refDoc.create('div', { className: 'chat-message-header' });
     const metadata = refDoc.create('span', {
@@ -44,36 +42,39 @@ export function createClientApplet() {
     refDoc.append(selectButton, header);
     refDoc.append(header, shell);
     refDoc.append(content, shell);
-    return { shell, content, metadata, selectButton, select };
+    return { shell, content, metadata, selectButton, select, messageId: message.messageId };
   }
 
-  function render(state, refDoc) {
-    const messages = orderedMessages(state);
-    const activeIds = new Set(messages.map((message) => message.messageId));
-    for (const [messageId, record] of recordsByMessageId) {
-      if (activeIds.has(messageId)) continue;
+  function render(state, refDoc, projectionMap) {
+    const all = orderedProjections(projectionMap);
+    const visible = all.slice(-10);
+    const activeKeys = new Set(visible.map((projection) => projection.projectionKey));
+    for (const [projectionKey, record] of recordsByProjectionKey) {
+      if (activeKeys.has(projectionKey)) continue;
       record.selectButton.removeEventListener('click', record.select);
       record.shell.remove();
-      recordsByMessageId.delete(messageId);
+      recordsByProjectionKey.delete(projectionKey);
     }
-    for (const message of messages) {
-      let record = recordsByMessageId.get(message.messageId);
+
+    const frame = projectionMap.beginBindingFrame();
+    for (const projection of visible) {
+      let record = recordsByProjectionKey.get(projection.projectionKey);
       if (!record) {
-        record = createMessageRecord(message, refDoc);
-        recordsByMessageId.set(message.messageId, record);
+        record = createMessageRecord(projection, refDoc);
+        recordsByProjectionKey.set(projection.projectionKey, record);
       }
+      const message = projection.hostData;
+      record.messageId = message.messageId;
       record.metadata.textContent = `#${message.sequence} · ${message.actorId}`;
-      record.shell.setAttribute('data-renderer-key', message.rendererKey);
       record.shell.className = message.messageId === state.chat?.selectedMessageId
         ? 'chat-message is-selected'
         : 'chat-message';
-      const renderMessage = renderersByKey.get(message.rendererKey);
-      if (renderMessage) renderMessage(record.content, message);
-      else record.content.textContent = `Renderer unavailable: ${message.rendererKey}`;
       flow.append(record.shell);
+      frame.bind(projection.projectionKey, record.content);
     }
-    count.textContent = `${messages.length} ${messages.length === 1 ? 'message' : 'messages'}`;
-    flow.dataset.messageCount = String(messages.length);
+    frame.commit();
+    count.textContent = `${all.length} ${all.length === 1 ? 'message' : 'messages'}`;
+    flow.dataset.messageCount = String(all.length);
   }
 
   async function submit(event) {
@@ -86,7 +87,7 @@ export function createClientApplet() {
     try {
       await appletOperation.send('Send message', { text });
       input.value = '';
-      status.textContent = 'Message stored; retained Chat state updated.';
+      status.textContent = 'Message stored and projected.';
     } catch (error) {
       status.textContent = error.message;
     } finally {
@@ -98,11 +99,14 @@ export function createClientApplet() {
 
   return {
     init(context) {
-      const { state, refDoc } = context;
+      const { state, refDoc, projectionMap } = context;
       appletOperation = context.appletOperation;
-      element = refDoc.create('section', { className: 'applet chat-sample-applet' });
-      const label = refDoc.create('span', { className: 'applet-label', text: 'APP / SAMPLES / CHAT' });
-      const heading = refDoc.create('h3', { text: 'Retained one-user Chat' });
+      element = refDoc.create('section', { className: 'chat-sample-applet' });
+      const heading = refDoc.create('h1', { text: 'Inner Browsing Chat' });
+      const intro = refDoc.create('p', {
+        className: 'chat-intro',
+        text: 'Chat owns each message shell. A projected Widget Post-it owns its inner content.',
+      });
       const shell = refDoc.create('div', { className: 'chat-sample-shell' });
       flow = refDoc.create('ol', { className: 'chat-flow', 'aria-live': 'polite' });
       form = refDoc.create('form', { className: 'chat-composer' });
@@ -127,24 +131,27 @@ export function createClientApplet() {
       refDoc.append(controls, form);
       refDoc.append(flow, shell);
       refDoc.append(form, shell);
-      refDoc.append(label, element);
       refDoc.append(heading, element);
+      refDoc.append(intro, element);
       refDoc.append(shell, element);
       form.addEventListener('submit', submit);
-      render(state, refDoc);
+      render(state, refDoc, projectionMap);
     },
     mount({ refDoc }) {
       refDoc.append(element);
     },
-    update({ state, refDoc }) {
-      render(state, refDoc);
+    update({ state, refDoc, projectionMap }) {
+      render(state, refDoc, projectionMap);
+    },
+    projectionsChanged({ state, refDoc, projectionMap }) {
+      render(state, refDoc, projectionMap);
     },
     destroy() {
       form?.removeEventListener('submit', submit);
-      for (const record of recordsByMessageId.values()) {
+      for (const record of recordsByProjectionKey.values()) {
         record.selectButton.removeEventListener('click', record.select);
       }
-      recordsByMessageId.clear();
+      recordsByProjectionKey.clear();
       element?.remove();
     },
   };

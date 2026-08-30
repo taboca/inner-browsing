@@ -1,363 +1,201 @@
 # Inner Browsing
 
-## Why Inner Browsing
-
-### Situation
-
-Web pages rarely remain just pages. As behavior accumulates, developers must coordinate application state, style, layout, events, server communication, and the ownership of each changing region.
-
-### Complication
-
-Adding one live element can force developers to adopt a framework, refactor the existing document into a component tree, or move page-wide state and styling into a new architecture. The cost of introducing a small capability then becomes the cost of restructuring the whole page, often around a strict hierarchy that the original HTML was never designed to express.
-
-### Question
-
-How can developers plug live, server-connected HTML elements into existing HTML while preserving the page, avoiding a full refactor, and allowing those elements to evolve without requiring one strict global hierarchy?
-
-### Answer — the goal
-
-Inner Browsing aims to make live applets attachable on top of existing HTML through small, local composition contracts. The page remains the host. Each applet can bring its own HTML, style, client behavior, server companion, state, and lifecycle, and it can be loaded or removed progressively without replacing the surrounding document. Composition should establish only the relationships needed at each mount point instead of requiring the entire application to be modeled as one rigid component tree.
-
-This is the direction of the project, not a claim that the current prototype has completed it. The implementation documented below still uses canonical `parentPath` relationships and named anchors to validate placement. Those contracts make the experiment safe and observable today; future iterations should allow applets to discover or negotiate existing HTML mount points with less structural coupling while preserving lifecycle isolation and explicit ownership.
-
-## Current prototype
-
-Inner Browsing is an experimental runtime for evolving a web application without replacing its surrounding page context. A canonical applet path currently connects persistent state, server behavior, browser behavior, ownership, and placement. Server companions can progressively compose the application, browser companions can send path-scoped operations back to their own server handlers, and retained applets can receive replacement state without being remounted.
-
-The present focus is not simply loading data into a page. It is loading,
-updating, and removing independently developed pieces of application
-behavior—paired server and client applets—with explicit lifecycles,
-parent-owned mount anchors, hash-addressed state, and streamed reconciliation.
-
-The demonstration begins at `app/live`:
-
-```text
-load app/live
-  → app/live server init
-  → appComposer.command("load app/live/menu")
-  → red menu mounts in live.left
-
-click “Add widgets”
-  → menu client JS
-  → appletOperation.send("Add widgets")
-  → Socket.IO applet.operation envelope
-  → menu/server/operations.js
-  → appComposer.command("load app/live/widgets")
-  → widgets mount in live.right
-```
-
-The URL or an external commander is therefore needed only to start the composition. Once `app/live` exists, its paired applets can progressively build the next UI state.
-
-## Chapter 1 — server-initiated composition
-
-Every server companion lifecycle now receives a root-scoped `appComposer` service:
-
-```js
-init({ path, state, appComposer, log }) {
-  appComposer.command('load app/live/menu').catch((error) => {
-    log('command:error', { error: error.message });
-  });
-}
-```
-
-`app/live` uses that service in its `init` lifecycle. The command enters the same serialized mutation queue used by HTTP, Socket.IO, and the command-line commander. It is dispatched without awaiting it inside `init`: the current `load app/live` transaction must finish before the nested `load app/live/menu` command can run.
-
-The live layout owns the placement policy:
-
-```js
-accepts: {
-  menu: 'left',
-  widgets: 'right',
-}
-```
-
-The menu definition declares `parentPath: 'app/live'` and `parentAnchor: 'left'`. The browser runtime checks both sides of that contract before giving the menu a scoped DOM reference. The menu owns its red presentation and its HTML, including the initially rendered `Add widgets` button.
-
-This makes applet server code part of the app's body of work without giving it direct access to the store, Socket.IO, Express, or another applet's implementation.
-
-## Chapter 2 — client-to-server applet operations
-
-The browser runtime gives each client companion an `appletOperation` service bound to that applet's canonical path:
-
-```js
-init({ refDoc, appletOperation }) {
-  button.addEventListener('click', () => {
-    appletOperation.send('Add widgets');
-  });
-}
-```
-
-The client cannot choose a different applet identity through this lifecycle service. The runtime builds the transport envelope:
-
-```js
-{
-  path: 'app/live/menu',
-  operation: 'Add widgets',
-  data: {}
-}
-```
-
-The server accepts `applet.operation`, verifies that the target applet is active and has a declared operations companion, then routes it to the menu-owned handler:
-
-```text
-src/applets/app/applets/live/applets/menu/server/operations.js
-```
-
-That handler owns the meaning of `Add widgets`:
-
-```js
-async handle({ operation, appComposer }) {
-  if (operation !== 'Add widgets') throw new Error(...);
-  return appComposer.command('load app/live/widgets');
-}
-```
-
-The operation handler receives the same root composer service as lifecycle code. It still does not manipulate the tree or another applet directly. Its command produces a normal snapshot broadcast, so the existing client reconciler mounts the widgets applet in `app/live.right`.
-
-Unknown operations, inactive targets, and applets without an operations companion are rejected and acknowledged as errors. The menu button displays success or failure and prevents duplicate clicks while its request is pending.
-
-## Chapter 3 — retained applet state updates
-
-`load` and `destroy` change composition. The `update` command changes the state
-of one already-active applet while retaining its logical path, parent anchor,
-tree position, server instance, and client instance:
-
-```js
-await appComposer.command('load app/samples/chat', initialState);
-await appComposer.command('update app/samples/chat', nextState);
-await appComposer.command('destroy app/samples/chat');
-```
-
-V1 treats `nextState` as a complete replacement of applet-owned state. The
-state store preserves its framework metadata, including `present` and
-`activatedAt`; it does not shallow-merge or deep-merge application fields.
-`update` rejects unknown and inactive applets and enters the same serialized
-queue as the composition commands.
-
-The state tree hashes the new node state and publishes a normal snapshot. The
-navigator compares the retained record's earlier `stateHash` with the new
-one. Only a changed applet receives the optional client lifecycle:
-
-```js
-update({ path, state, refDoc, appletOperation }) {
-  // Reconcile this applet's owned DOM from its complete next state.
-}
-```
-
-The server instance is retained and its runtime state record is refreshed,
-but V1 does not introduce a server-side `update` callback. A no-op replacement
-succeeds without invoking a client update lifecycle.
-
-The accepted V1 contract is:
-
-1. `update` targets only a registered, active applet.
-2. Its plain-object input completely replaces applet-owned state while the
-   store preserves `present` and `activatedAt`.
-3. The operation shares the serialized `load`/`update`/`destroy` queue.
-4. The server instance is retained and its runtime state record is refreshed;
-   V1 does not introduce a server-side `update` callback.
-5. The retained client receives optional `update({ state })` only when its
-   `stateHash` changes.
-6. Invalid updates change no state and publish no successful snapshot.
-7. Runtime, appComposer, HTTP, Socket.IO, commander, and scenario surfaces use
-   the same command vocabulary.
-8. Expected-hash revisions, multi-process conflict handling, server update
-   callbacks, and repeated keyed applet instances remain later capabilities.
-
-The executable example is the registered one-user Chat at
-[`app/samples/chat`](README.sample.chat.md). It demonstrates a path-scoped
-`Send message` operation, a durable sample message append, an
-`update app/samples/chat` command, retained client reconciliation, a
-scrollable message flow, and a sender/count bar.
-
-## Architecture playbook — physical ownership and logical composition
-
-An applet's own implementation and its child applets are different kinds of content. They should not be siblings with indistinguishable names. Every applet package follows this shape:
-
-```text
-<applet>/
-├── index.js       definition and composition contract
-├── client/        this applet's browser companion
-├── server/        this applet's private server companions
-└── applets/       independently activated child applets
-```
-
-Applied to this example:
-
-```text
-src/applets/app/
-├── index.js
-├── client/
-├── server/
-└── applets/
-    ├── live/
-        ├── index.js
-        ├── client/
-        ├── server/
-        └── applets/
-            ├── menu/
-            │   ├── index.js
-            │   ├── client/
-            │   └── server/
-            └── widgets/
-                ├── index.js
-                ├── client/
-                └── server/
-    └── samples/
-        ├── index.js
-        ├── client/
-        ├── server/
-        └── applets/
-            └── chat/
-                ├── index.js
-                ├── client/
-                └── server/
-```
-
-Use `applets/` for independently activated children. Reserve a possible `src/` directory for implementation modules that belong only to the current applet; a `src/` module does not get its own state node, lifecycle, operation endpoint, or mount contract.
-
-### The filesystem does not define the application path
-
-Physical nesting expresses source ownership. The applet definition remains the source of truth for logical identity and placement:
-
-```js
-// app/index.js
-accepts: Object.freeze({
-  live: 'content',
-})
-
-// app/applets/live/index.js
-{
-  path: 'app/live',
-  parentPath: 'app',
-  parentAnchor: 'content',
-}
-```
-
-The parent-side entry `live: 'content'` means “accept the logical child segment `live` at my `content` anchor.” It does not mean that the runtime should search for a physical `./live` directory. The same rule gives `menu: 'left'` and `widgets: 'right'` their mount points inside `app/live`.
-
-This produces three related but separate addresses:
-
-```text
-Physical ownership  src/applets/app/applets/live/applets/menu
-Logical identity    app/live/menu
-Mount placement     app/live.left
-```
-
-Moving source files must not change the logical path or mount placement unless the application composition itself is changing.
-
-### Public module URL versus private source file
-
-Each definition declares two client locations:
-
-```js
-{
-  clientModule: '/applets/app/live/menu/client/index.js',
-  clientFile: fileURLToPath(new URL('./client/index.js', import.meta.url)),
-}
-```
-
-- `clientModule` is the stable logical URL streamed to browsers. It follows the canonical applet path.
-- `clientFile` is the private absolute file location used only by Express to serve that URL. It follows the physical ownership tree.
-
-The registry verifies that every `clientModule` matches its canonical applet path and that every `clientFile` exists. Snapshots include `clientModule` but never expose `clientFile`. This prevents a source reorganization from changing browser protocol addresses or leaking server filesystem paths.
-
-### Adding a child applet
-
-1. Create it under `<parent>/applets/<child-name>/` with `index.js`, `client/`, and `server/` companions as needed.
-2. Give it the canonical `path`, `parentPath`, and `parentAnchor` in its definition.
-3. Add `<child-name>: '<anchor>'` to the parent's `accepts` contract.
-4. Keep `clientModule` based on the canonical path and `clientFile` relative to the definition file.
-5. Register the definition explicitly in `appletRegistry.js`.
-6. Test both the logical mount contract and any lifecycle or operation behavior.
-
-## Responsibility boundaries
-
-```text
-Applet definition
-  canonical path, parent contract, public client URL, private client file, companion factories
-
-Server lifecycle companion
-  init/destroy behavior; may issue root appComposer commands
-
-Client lifecycle companion
-  applet HTML and interaction; may send path-scoped applet operations
-
-Server operations companion
-  validates local operation names and translates them into domain/app commands
-
-App composer runtime
-  serializes load/update/destroy, owns state and server instances, publishes snapshots
-
-Navigator runtime
-  reconciles composition and state hashes, resolves anchors, scopes DOM and operations
-```
-
-The important distinction is between an app command and an applet operation. `load app/live/widgets` is a root-level composition command. `Add widgets` is a menu-local intent. Only the menu's server operations companion translates between them.
-
-## Run the demonstration
+Inner Browsing is a small framework for server-directed, lifecycle-managed
+applet composition. Its default and only demonstration is a retained Chat
+whose messages materialize repeated projected Post-it applets.
+
+Open <http://localhost:4420/> after starting the server. The page contains the
+sample itself—there is no demonstration picker, outer header, footer, or
+inspector competing with the applet surface.
+
+## Run and verify
 
 ```bash
-git clone git@github.com:taboca/inner-browsing.git
-cd inner-browsing
 npm install
 npm start
 ```
-
-Open <http://localhost:4420/app/live>. The live server companion automatically adds the red menu on the left. Click `Add widgets`; the menu operation reaches its server companion and the yellow widgets applet appears on the right.
-
-Open <http://localhost:4420/app/samples/chat> for the retained-state sample.
-Send a message and observe that the Chat client reports `updated` without a
-second `initialized` or `mounted` lifecycle entry. The detailed walkthrough is
-in [README.sample.chat.md](README.sample.chat.md).
-
-External command paths are also available:
-
-```bash
-npm run command -- load app/live
-npm run command -- load app/samples/chat
-npm run command -- update app/samples/chat '{"chat":{"messages":[],"messageCount":0,"selectedMessageId":null}}'
-npm run command -- destroy app/live/widgets
-npm run scenario -- commander/scenarios/test1.json
-```
-
-HTTP commands remain available through `POST /api/commands`, and the current state through `GET /api/snapshot`.
-For isolated runs, `STATE_ROOT` can point the server at a different state
-directory, `SAMPLE_DATA_ROOT` can isolate the Chat sample's durable messages,
-and `INNER_BROWSING_URL` can point the commander at a non-default server URL.
-The older `NAVIGATOR_URL` name remains accepted for compatibility.
-
-## Verify
 
 ```bash
 npm run check
 ```
 
-The tests cover state-tree and scenario behavior plus:
+Node.js 20 or newer is required. Persistence can be isolated with three
+independent roots:
 
-- the separation between nested physical ownership and stable logical module URLs;
-- the `app/live` init command progressively adding `app/live/menu`;
-- dispatching `Add widgets` to the active menu server operations companion;
-- rejecting an unknown menu operation;
-- binding the browser operation service to the current applet path;
-- wiring the menu's HTML button to `Add widgets`.
-- replacement-state semantics and preservation of framework metadata;
-- rejection of unknown, inactive, and invalid update targets;
-- retained server and client instances without repeated initialization;
-- state-hash-scoped client updates and unchanged sibling isolation;
-- serialized `load`, `update`, and `destroy` commands;
-- rejected updates producing neither state changes nor successful snapshots;
-- durable Chat message append and selection operations; and
-- Chat-owned `messageId` target retention and `rendererKey` dispatch.
+```bash
+STATE_ROOT=/tmp/inner-browsing-state \
+PROJECTION_ROOT=/tmp/inner-browsing-projections \
+SAMPLE_DATA_ROOT=/tmp/inner-browsing-samples \
+npm start
+```
 
-## Intentional boundary
+- `STATE_ROOT` owns canonical composition and applet state.
+- `PROJECTION_ROOT` owns durable projected applet records.
+- `SAMPLE_DATA_ROOT` owns the Chat application's durable messages.
 
-This prototype has one shared application snapshot. Applet operation authorization is structural—active path plus declared handler—not yet user/session authorization. A production continuation should bind commands and operations to a session/runtime identity, add expected-hash preconditions, and define permission checks for each operations companion. Registered applets can be activated dynamically, but V1 still has one instance per canonical path; repeated keyed instances and `load` commands targeting arbitrary dynamic DOM tags are not implemented.
+The application also exposes `/api/snapshot`, `/api/commands`, Socket.IO
+navigation and applet-operation transports, and a command-line composer:
 
-## License
+```bash
+npm run command -- load app/samples/chat
+npm run command -- update app/samples/chat '{"selectedMessageId":null}'
+npm run command -- destroy app/samples/chat
+```
 
-Copyright (C) 2026 Marcio Galli. Inner Browsing is free software licensed under the [GNU Affero General Public License, version 3 or later](LICENSE).
+## Two state domains
 
-## Historical background
+The canonical composition is deliberately small:
 
-The name revisits the 2003 article [“Inner-Browsing: Extending Web Browsing the Navigation Paradigm”](https://web.archive.org/web/20040619061949/http://devedge.netscape.com/viewsource/2003/inner-browsing/) by Marcio Galli, Roger Soares, and Ian Oeschger, published on 16 May 2003. That original vision preserved page context by separating contextual data loading—using techniques such as hidden iframes or `XMLHttpRequest`—from DOM binding instead of replacing the whole page; this 2026 project takes a different step, applying the context-preserving idea to server-directed composition of lifecycle-managed applets and their ongoing client-to-server operations.
+```text
+app
+└── app/samples
+    └── app/samples/chat
+```
+
+Canonical nodes are addressed by registered paths, persisted by
+`stateTreeStore`, and reconciled by parent/child anchors. The snapshot's
+`hash` remains the canonical tree hash for compatibility; `treeHash` exposes
+the same value explicitly.
+
+Projected applets live in a separate state domain. A Projection Map record is
+self-sufficient:
+
+```js
+{
+  projectionKey: 'chat.message.message-157.widget-postit',
+  hostPath: 'app/samples/chat',
+  targetKey: 'message-157',
+  appletPath: 'app/samples/chat/widget-postit',
+  hostData: { messageId, sequence, actorId, createdAt },
+  appletState: { text },
+  persistence: 'durable'
+}
+```
+
+The identities are intentionally distinct:
+
+- `appletPath` identifies a registered applet definition.
+- A canonical path identifies one composed canonical instance.
+- `projectionKey` identifies one projected instance.
+- `targetKey` identifies one logical slot within a host.
+- `appletStateHash` identifies content only; equal Post-its can share it.
+- A DOM element is an ephemeral browser binding, never persisted state.
+
+Projection-owned `appletState` is authoritative for the projected runtime
+instance. It is durable and rehydratable without entering the canonical tree
+or propagating through `treeHash`. It is therefore not a duplicate of a
+second applet-instance record. A future model that shares one instance across
+multiple placements would need a separate instance store and `instanceId`.
+
+## Independent hashes
+
+Canonical and projected state publish together but hash independently:
+
+```js
+{
+  hash: treeHash,
+  treeHash,
+  projectionHash,
+  projectionMap: { hash: projectionHash, records }
+}
+```
+
+There is intentionally no combined navigation hash. A projection-only change
+must not make routing consumers believe that canonical composition changed.
+The navigator receives each published snapshot and reconciles canonical
+records and Projection Map records separately, so it does not need a combined
+hash as a delivery gate.
+
+`projectionHash` remains useful for diagnostics, equality checks, tests,
+cache/change detection for projection consumers, and eventual selective
+transport. The Chat case changes it whenever a message projection is added or
+its Post-it state changes, but does not consume it to render or rehydrate. It
+is not identity; the records themselves provide identity and persistence.
+
+## Projection lifecycle
+
+The server gives each canonical applet a host-scoped Projection Manager:
+
+```text
+register / ensure / updateState / updateHostData / destroy / list
+```
+
+Projection mutations share the runtime's serialized publication queue with
+canonical mutations but do not share the canonical hash tree. Durable records
+survive server restart; runtime records survive browser reload only while the
+server process remains alive.
+
+A projected server companion is retained by `projectionKey`. Registration or
+restore initializes it, state replacement refreshes its runtime state, and
+destroy cleans it up. Projected operations are likewise bound to
+`projectionKey`, never to a caller-selected path or content hash.
+
+In the browser, the host receives a safe path-scoped Projection Map view.
+Bindings use an exact-frame contract:
+
+```text
+begin frame
+  → bind every currently visible projectionKey to its content element
+commit frame
+  → materialize new bindings
+  → retain unchanged bindings
+  → destroy only true orphans
+```
+
+An uncommitted render cannot accidentally remove live projected clients. A
+projection without a current DOM binding is valid pending state; pagination
+can later bind and rematerialize it under the same identity.
+
+## Default Chat case
+
+Chat is both the default route and the framework's acceptance case. It owns
+message ordering, green shells, metadata, selection, the composer, and the
+last-ten visible window. Each shell contributes one content target. The
+projected `widget-postit` definition owns only the inner `<article><em>`
+subtree and its cleanup.
+
+The definition is physically nested under Chat because it belongs to this
+sample:
+
+```text
+src/applets/app/applets/samples/applets/chat/
+├── client/
+├── server/
+└── applets/
+    └── widget-postit/
+        ├── client/
+        └── server/
+```
+
+Its logical address is `app/samples/chat/widget-postit`, but its
+`instanceMode: 'projected'` means it is not a canonical child and cannot be
+loaded through the composition tree. Hundreds of instances may share this
+definition while remaining separately addressable by projection key.
+
+See [README.sample.chat.md](README.sample.chat.md) for the complete executable
+flow and [Chapter 7](../labs-meetingbro/project/README_MEMO_2026_08_30_100_chapter_7_projected_applet_materialization_and_chat_framework_update_plan.md)
+for the architectural decision record.
+
+## Source map
+
+```text
+server.js                         HTTP and Socket.IO boundary
+commander/                        canonical composition CLI and scenarios
+src/appletRegistry.js             canonical/projected definition registry
+src/stateTreeStore.js             canonical state and tree hashing
+src/projectionStore.js            durable/runtime Projection Map records
+src/appletRuntime.js              serialization and server lifecycles
+src/stableJson.js                 shared JSON validation and hashing
+public/runtime/navigator.js       canonical and projected client reconciliation
+public/runtime/projectionMap.js   safe views and atomic binding frames
+src/applets/.../chat/             default Chat host sample
+test/                             store, runtime, browser, Chat, and CLI coverage
+```
+
+This prototype is intentionally a shared single-application runtime. Each
+browser has independent DOM bindings and client companions, while canonical
+state and the server Projection Map are shared. Authentication, per-user
+projection filtering, multi-process coordination, viewport virtualization,
+and general transactions remain outside this pass.
+
+License: AGPL-3.0-or-later.

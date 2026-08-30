@@ -3,12 +3,8 @@ export function createClientApplet() {
 
   return {
     init({ refDoc }) {
-      element = refDoc.create('section', { className: 'applet samples-applet' });
-      const label = refDoc.create('span', { className: 'applet-label', text: 'APP / SAMPLES' });
-      const heading = refDoc.create('h2', { text: 'Inner Browsing samples' });
+      element = refDoc.create('div', { className: 'samples-root' });
       const content = refDoc.create('div', { className: 'samples-content' });
-      refDoc.append(label, element);
-      refDoc.append(heading, element);
       refDoc.append(content, element);
       refDoc.registerAnchor('content', content);
     },

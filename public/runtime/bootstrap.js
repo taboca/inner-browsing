@@ -2,9 +2,6 @@ import { createNavigator } from './navigator.js';
 
 const initialSnapshot = JSON.parse(document.getElementById('initial-snapshot').textContent);
 const host = document.getElementById('applet-host');
-const hash = document.getElementById('snapshot-hash');
-const tree = document.getElementById('snapshot-tree');
-const lifecycle = document.getElementById('lifecycle-log');
 const socket = window.io();
 
 function sendAppletOperation(envelope) {
@@ -17,19 +14,26 @@ function sendAppletOperation(envelope) {
   });
 }
 
+function sendProjectionOperation(envelope) {
+  return new Promise((resolve, reject) => {
+    socket.timeout(5000).emit('projection.operation', envelope, (error, response) => {
+      if (error) return reject(new Error('Projected operation acknowledgement timed out'));
+      if (!response?.ok) return reject(new Error(response?.error || 'Projected operation failed'));
+      resolve(response);
+    });
+  });
+}
+
 function renderSnapshot(snapshot) {
-  hash.textContent = snapshot.hash;
-  tree.textContent = snapshot.activePaths.length ? snapshot.activePaths.join('\n') : '(empty tree)';
-  document.body.dataset.snapshotHash = snapshot.hash;
+  document.body.dataset.treeHash = snapshot.treeHash || snapshot.hash;
+  document.body.dataset.projectionHash = snapshot.projectionMap?.hash || '';
 }
 
 const navigator = createNavigator({
   document,
   host,
   sendAppletOperation,
-  onLifecycle(event) {
-    lifecycle.textContent = `${event.side}:${event.path}:${event.phase}\n${lifecycle.textContent}`.trim();
-  },
+  sendProjectionOperation,
 });
 
 let reconciliation = Promise.resolve();

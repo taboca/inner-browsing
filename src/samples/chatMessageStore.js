@@ -58,7 +58,6 @@ export function createChatMessageStore({
       sequence,
       createdAt: now(),
       actorId,
-      rendererKey: 'self.text',
       text: normalizedText,
     };
     database.messages.push(message);

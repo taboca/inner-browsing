@@ -8,7 +8,7 @@ test('scenario commands execute sequentially and validate active paths', async (
     steps: [
       { id: 'app', operation: 'load', path: 'app', expect: { activePaths: ['app'] } },
       { id: 'app-update', operation: 'update', path: 'app', state: { title: 'Updated' }, expect: { activePaths: ['app'] } },
-      { id: 'live', operation: 'load', path: 'app/live', expect: { activePaths: ['app', 'app/live'] } },
+      { id: 'chat', operation: 'load', path: 'app/samples/chat', expect: { activePaths: ['app', 'app/samples', 'app/samples/chat'] } },
     ],
   });
   const order = [];
@@ -30,8 +30,8 @@ test('scenario commands execute sequentially and validate active paths', async (
     'finish:app',
     'start:app-update',
     'finish:app-update',
-    'start:live',
-    'finish:live',
+    'start:chat',
+    'finish:chat',
   ]);
   assert.equal(result.passed, 3);
 });
@@ -40,7 +40,7 @@ test('scenario stops at the first failed expectation', async () => {
   const scenario = validateScenario({
     steps: [
       { id: 'wrong', operation: 'load', path: 'app', expect: { activePaths: ['app'] } },
-      { id: 'never', operation: 'load', path: 'app/live' },
+      { id: 'never', operation: 'load', path: 'app/samples/chat' },
     ],
   });
   let calls = 0;
@@ -62,8 +62,8 @@ test('scenario waits between acknowledged steps but not after the final step', a
     delayMs: 1000,
     steps: [
       { id: 'app', operation: 'load', path: 'app' },
-      { id: 'live', operation: 'load', path: 'app/live' },
-      { id: 'widgets', operation: 'load', path: 'app/live/widgets' },
+      { id: 'samples', operation: 'load', path: 'app/samples' },
+      { id: 'chat', operation: 'load', path: 'app/samples/chat' },
     ],
   });
   const events = [];
@@ -80,8 +80,8 @@ test('scenario waits between acknowledged steps but not after the final step', a
   assert.deepEqual(events, [
     'send:app',
     'wait:1000',
-    'send:live',
+    'send:samples',
     'wait:1000',
-    'send:widgets',
+    'send:chat',
   ]);
 });

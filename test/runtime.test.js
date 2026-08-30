@@ -5,52 +5,44 @@ import path from 'node:path';
 import test from 'node:test';
 import { createAppletRegistry } from '../src/appletRegistry.js';
 import { createAppletRuntime } from '../src/appletRuntime.js';
+import { createProjectionStore } from '../src/projectionStore.js';
+import { createChatMessageStore } from '../src/samples/chatMessageStore.js';
 import { createStateTreeStore } from '../src/stateTreeStore.js';
 
-test('server companions follow parent-first init and child-first destroy', async () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'navigator-runtime-'));
+function fixture() {
+  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'inner-browsing-runtime-'));
+  const chatMessageStore = createChatMessageStore({ filename: path.join(directory, 'messages.json') });
+  const registry = createAppletRegistry({ chatMessageStore });
+  const store = createStateTreeStore({ stateRoot: path.join(directory, 'state'), registry });
+  const projectionStore = createProjectionStore({ projectionRoot: path.join(directory, 'projections'), registry });
+  const runtime = createAppletRuntime({ registry, store, projectionStore, log() {} });
+  return { directory, registry, store, projectionStore, runtime };
+}
+
+test('canonical Chat companions follow parent-first activation and child-first removal', async () => {
+  const { directory, runtime } = fixture();
   try {
-    const registry = createAppletRegistry();
-    const store = createStateTreeStore({ stateRoot: directory, registry });
-    const runtime = createAppletRuntime({ registry, store, log() {} });
-    await runtime.load('app/live/widgets');
-    assert.deepEqual(runtime.instancePaths(), ['app', 'app/live', 'app/live/widgets']);
-    await runtime.destroy('app/live');
+    await runtime.load('app/samples/chat');
+    await runtime.idle();
+    assert.deepEqual(runtime.instancePaths(), ['app', 'app/samples', 'app/samples/chat']);
+    await runtime.destroy('app/samples');
     assert.deepEqual(runtime.instancePaths(), ['app']);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
 });
 
-test('a server companion can progressively compose a child through appComposer', async () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'progressive-runtime-'));
+test('Chat initialization progressively ensures durable message projections', async () => {
+  const { directory, runtime, projectionStore } = fixture();
   try {
-    const registry = createAppletRegistry();
-    const store = createStateTreeStore({ stateRoot: directory, registry });
-    const runtime = createAppletRuntime({ registry, store, log() {} });
-    await runtime.load('app/live');
+    const chatMessageStore = createChatMessageStore({ filename: path.join(directory, 'messages.json') });
+    chatMessageStore.append({ text: 'Seeded before Chat activation' });
+    await runtime.load('app/samples/chat');
     await runtime.idle();
-    assert.deepEqual(runtime.snapshot().activePaths, ['app', 'app/live', 'app/live/menu']);
-    assert.deepEqual(runtime.instancePaths(), ['app', 'app/live', 'app/live/menu']);
-  } finally {
-    fs.rmSync(directory, { recursive: true, force: true });
-  }
-});
-
-test('an active applet operation can compose another applet', async () => {
-  const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'progressive-operation-'));
-  try {
-    const registry = createAppletRegistry();
-    const store = createStateTreeStore({ stateRoot: directory, registry });
-    const runtime = createAppletRuntime({ registry, store, log() {} });
-    await runtime.load('app/live');
-    await runtime.idle();
-    const result = await runtime.operate('app/live/menu', 'Add widgets');
-    assert.equal(result.command, 'load app/live/widgets');
-    assert.deepEqual(result.activePaths, ['app', 'app/live', 'app/live/menu', 'app/live/widgets']);
-    assert.deepEqual(runtime.instancePaths(), ['app', 'app/live', 'app/live/menu', 'app/live/widgets']);
-    await assert.rejects(runtime.operate('app/live/menu', 'Surprise me'), /Unknown menu operation/);
-    await assert.rejects(runtime.operate('app/live', 'Add widgets'), /does not accept operations/);
+    assert.equal(projectionStore.snapshot().records.length, 1);
+    assert.deepEqual(runtime.projectionInstanceKeys(), [projectionStore.snapshot().records[0].projectionKey]);
+    assert.equal(runtime.snapshot().treeHash, runtime.snapshot().hash);
+    assert.match(runtime.snapshot().projectionMap.hash, /^[a-f0-9]{64}$/);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

@@ -1,24 +1,6 @@
-import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
-
-function stable(value) {
-  if (Array.isArray(value)) return value.map(stable);
-  if (value && typeof value === 'object') {
-    return Object.fromEntries(Object.keys(value).sort().map((key) => [key, stable(value[key])]));
-  }
-  return value;
-}
-
-function hash(value) {
-  return crypto.createHash('sha256').update(JSON.stringify(stable(value))).digest('hex');
-}
-
-function isPlainObject(value) {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) return false;
-  const prototype = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
-}
+import { hash, isPlainObject, stable } from './stableJson.js';
 
 export function normalizeAppletPath(value) {
   const normalized = String(value || '').trim().replace(/^\/+|\/+$/g, '');
@@ -33,7 +15,7 @@ export function createStateTreeStore({ stateRoot, registry, now = () => new Date
 
   function nodeFile(appletPath) {
     const normalized = normalizeAppletPath(appletPath);
-    if (!registry.has(normalized)) throw new Error(`Unknown applet: ${normalized}`);
+    if (!registry.hasCanonical(normalized)) throw new Error(`Unknown canonical applet: ${normalized}`);
     return path.join(stateRoot, ...normalized.split('/'), 'root.json');
   }
 
@@ -56,7 +38,7 @@ export function createStateTreeStore({ stateRoot, registry, now = () => new Date
   }
 
   function activePaths() {
-    return registry.paths().filter((appletPath) => readState(appletPath)?.present === true);
+    return registry.canonicalPaths().filter((appletPath) => readState(appletPath)?.present === true);
   }
 
   function snapshot() {
@@ -89,7 +71,7 @@ export function createStateTreeStore({ stateRoot, registry, now = () => new Date
 
   function load(appletPath, inputState = {}) {
     const normalized = normalizeAppletPath(appletPath);
-    if (!registry.has(normalized)) throw new Error(`Unknown applet: ${normalized}`);
+    if (!registry.hasCanonical(normalized)) throw new Error(`Unknown applet: ${normalized}`);
     const added = [];
     for (const item of registry.lineage(normalized)) {
       const previous = readState(item);
@@ -106,7 +88,7 @@ export function createStateTreeStore({ stateRoot, registry, now = () => new Date
 
   function update(appletPath, inputState = {}) {
     const normalized = normalizeAppletPath(appletPath);
-    if (!registry.has(normalized)) throw new Error(`Unknown applet: ${normalized}`);
+    if (!registry.hasCanonical(normalized)) throw new Error(`Unknown applet: ${normalized}`);
     const previous = readState(normalized);
     if (!previous?.present) throw new Error(`Cannot update inactive applet: ${normalized}`);
     if (!isPlainObject(inputState)) throw new Error('Applet update state must be a plain object');
@@ -127,7 +109,7 @@ export function createStateTreeStore({ stateRoot, registry, now = () => new Date
 
   function destroy(appletPath) {
     const normalized = normalizeAppletPath(appletPath);
-    if (!registry.has(normalized)) throw new Error(`Unknown applet: ${normalized}`);
+    if (!registry.hasCanonical(normalized)) throw new Error(`Unknown applet: ${normalized}`);
     const removed = activePaths()
       .filter((item) => item === normalized || item.startsWith(`${normalized}/`))
       .sort((a, b) => b.split('/').length - a.split('/').length);

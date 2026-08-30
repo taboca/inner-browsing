@@ -51,7 +51,9 @@ function oneAppletRegistry({ onInit = () => {}, handle = null } = {}) {
   return {
     get(appletPath) { return appletPath === 'app' ? definition : null; },
     has(appletPath) { return appletPath === 'app'; },
+    hasCanonical(appletPath) { return appletPath === 'app'; },
     paths() { return ['app']; },
+    canonicalPaths() { return ['app']; },
     lineage() { return ['app']; },
   };
 }
@@ -59,22 +61,22 @@ function oneAppletRegistry({ onInit = () => {}, handle = null } = {}) {
 test('update replaces active applet state while preserving tree and framework metadata', () => {
   const { directory, store } = stateFixture();
   try {
-    const before = store.load('app/live/widgets', {
+    const before = store.load('app/samples/chat', {
       stale: 'remove-me',
       nested: { value: 'before' },
     }).snapshot;
-    const beforeTarget = nodeAt(before, 'app/live/widgets');
-    const beforeParent = nodeAt(before, 'app/live');
-    const result = store.update('app/live/widgets', {
+    const beforeTarget = nodeAt(before, 'app/samples/chat');
+    const beforeParent = nodeAt(before, 'app/samples');
+    const result = store.update('app/samples/chat', {
       nested: { value: 'after' },
       present: false,
       activatedAt: 'caller-cannot-replace-this',
     });
     const after = result.snapshot;
-    const afterTarget = nodeAt(after, 'app/live/widgets');
-    const afterParent = nodeAt(after, 'app/live');
+    const afterTarget = nodeAt(after, 'app/samples/chat');
+    const afterParent = nodeAt(after, 'app/samples');
 
-    assert.deepEqual(result.updated, ['app/live/widgets']);
+    assert.deepEqual(result.updated, ['app/samples/chat']);
     assert.deepEqual(after.activePaths, before.activePaths);
     assert.equal(afterTarget.parentPath, beforeTarget.parentPath);
     assert.equal(afterTarget.parentAnchor, beforeTarget.parentAnchor);
@@ -96,10 +98,10 @@ test('update rejects unknown, inactive, and non-object targets without changing 
   const { directory, store } = stateFixture();
   try {
     assert.throws(() => store.update('app/missing', {}), /Unknown applet/);
-    assert.throws(() => store.update('app/live', {}), /inactive applet/);
-    store.load('app/live');
+    assert.throws(() => store.update('app/samples', {}), /inactive applet/);
+    store.load('app/samples');
     const before = store.snapshot();
-    assert.throws(() => store.update('app/live', []), /plain object/);
+    assert.throws(() => store.update('app/samples', []), /plain object/);
     assert.equal(store.snapshot().hash, before.hash);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });

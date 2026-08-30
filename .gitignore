@@ -7,3 +7,5 @@ coverage/
 .DS_Store
 db/state/*
 !db/state/.gitkeep
+db/projections/*
+!db/projections/.gitkeep

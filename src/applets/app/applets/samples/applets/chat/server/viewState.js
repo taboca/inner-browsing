@@ -1,10 +1,24 @@
-export function createChatViewState(messages, { selectedMessageId = null } = {}) {
-  const ordered = [...messages].sort((left, right) => left.sequence - right.sequence);
+export function createChatViewState({ selectedMessageId = null, lastAction = null } = {}) {
   return {
     chat: {
-      messages: ordered,
-      messageCount: ordered.length,
       selectedMessageId,
+      lastAction,
     },
+  };
+}
+
+export function createMessageProjection(message) {
+  return {
+    projectionKey: `chat.message.${message.messageId}.widget-postit`,
+    targetKey: message.messageId,
+    appletPath: 'app/samples/chat/widget-postit',
+    hostData: {
+      messageId: message.messageId,
+      sequence: message.sequence,
+      actorId: message.actorId,
+      createdAt: message.createdAt,
+    },
+    appletState: { text: message.text },
+    persistence: 'durable',
   };
 }
