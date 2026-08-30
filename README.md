@@ -344,4 +344,19 @@ filtering, multi-process coordination, viewport virtualization, multiple
 placements for one projected instance, and general transactions remain outside
 this pass.
 
-License: AGPL-3.0-or-later.
+## License
+
+Copyright (C) 2026 Marcio Galli. Inner Browsing is free software licensed under
+the [GNU Affero General Public License, version 3 or later](LICENSE).
+
+## Historical background
+
+The name revisits the 2003 article
+[“Inner-Browsing: Extending Web Browsing the Navigation Paradigm”](https://web.archive.org/web/20040619061949/http://devedge.netscape.com/viewsource/2003/inner-browsing/)
+by Marcio Galli, Roger Soares, and Ian Oeschger, published on 16 May 2003. That
+original vision preserved page context by separating contextual data
+loading—using techniques such as hidden iframes or `XMLHttpRequest`—from DOM
+binding instead of replacing the whole page; this 2026 project takes a
+different step, applying the context-preserving idea to server-directed
+composition of lifecycle-managed applets and their ongoing client-to-server
+operations.
