@@ -1,14 +1,102 @@
 # Inner Browsing
 
-Inner Browsing is a small framework for server-directed, lifecycle-managed
-applet composition. It supports ordinary canonical applets and repeated
-projected applet instances without turning dynamic browser targets into routes
-or duplicating projected state in the canonical tree.
+## Introduction
 
-The repository includes one focused sample case: a retained Chat in which each
-message shell hosts a projected Widget Post-it.
+Modern web applications are increasingly built around rich client-side
+runtimes. Frameworks such as React made it practical to describe interfaces as
+functions of state, while patterns associated with Redux and similar
+architectures helped developers centralize state changes and make complex
+interfaces more predictable. This model has been enormously productive. But as
+applications grow, more responsibility tends to accumulate inside the browser:
+routing, state coordination, component identity, lifecycle, synchronization
+with the server, recovery after reload, and the reconciliation of increasingly
+dynamic interface regions.
 
-## Framework key points
+The complication is that these concerns do not always belong to the same
+layer. Application state is not necessarily navigation state. A component that
+appears dynamically inside another component does not necessarily deserve to
+become a route. Server-authoritative state should not have to be reconstructed
+from a browser's component tree. And when many independently stateful pieces of
+UI need to appear, disappear, reload, or move within application-controlled
+layouts, developers can end up building increasingly elaborate client-side
+coordination machinery simply to keep the interface and the server describing
+the same application.
+
+This raises a broader architectural question: **can a web application retain
+the flexibility of component-based interfaces while giving the server a
+stronger role in composition, state ownership, lifecycle, and recovery?**
+
+**Inner Browsing** is an exploration of that model. It is a small framework for
+server-directed, lifecycle-managed applet composition. Instead of treating the
+browser as the sole owner of application structure, Inner Browsing gives
+applications explicit primitives for canonical composition, repeated projected
+applets, durable state, deterministic lifecycle behavior, and browser-local
+placement. The browser still owns the DOM and interaction surface, but it
+participates in a larger runtime contract rather than reconstructing the
+application's architecture by itself.
+
+### A. Why: separate concerns that modern web apps often collapse
+
+Inner Browsing distinguishes several things that are commonly made to travel
+together: routing topology, application state, repeated component identity,
+projected state, and actual DOM placement. Canonical applets use registered
+paths and the familiar `load`, `update`, and `destroy` lifecycle, while
+projected applets can exist in large numbers without becoming artificial
+routes. Canonical state and projected state also remain separate change
+domains.
+
+The result is a framework where:
+
+```text
+routing structure       ≠ every component instance
+server state            ≠ browser DOM
+projected widget state  ≠ canonical route state
+logical placement       ≠ HTMLElement identity
+```
+
+This separation is the central architectural idea.
+
+### B. How: the Chat and Post-it example
+
+The included Chat sample makes that model concrete. Chat itself is a canonical
+applet. It owns the message list, ordering, selection, composer, layout, and the
+visible ten-message window. Each message shell can then host a projected Widget
+Post-it, which owns only the inner rendered content.
+
+When a new message is sent:
+
+```text
+persist application message
+        ↓
+register projected Post-it
+        ↓
+publish framework state
+        ↓
+Chat creates the message shell
+        ↓
+Chat binds the projection to its DOM target
+        ↓
+navigator materializes the Post-it
+```
+
+Pagination, reload, and repeated instances all follow from the same model. A
+projected widget can disappear from the browser while its durable projection
+remains available to be materialized again later.
+
+### C. Where this can go
+
+Chat is deliberately a small proving ground. The same primitives point toward
+applications composed from independently stateful tools, panels, documents,
+assistants, media, inspectors, or generated UI without requiring every dynamic
+instance to become a route or forcing all of their state into one client-side
+store.
+
+Inner Browsing is therefore less an attempt to replace component frameworks
+than an experiment in **changing where application coordination lives**:
+keeping the browser expressive, while making composition, lifecycle,
+persistence, and projected materialization explicit framework concepts.
+
+## Framework solution: key contracts
 
 The framework separates composition, projected materialization, application
 data, and browser placement:
