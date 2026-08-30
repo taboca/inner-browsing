@@ -1,41 +1,27 @@
 {
   "version": 1,
-  "nextSequence": 6,
+  "nextSequence": 4,
   "messages": [
     {
-      "messageId": "message-welcome",
+      "messageId": "message-1",
       "sequence": 1,
       "createdAt": "2026-08-29T12:00:00.000Z",
       "actorId": "sample-self",
-      "text": "This Chat applet is ready to demonstrate projected Post-it materialization."
+      "text": "#1"
     },
     {
-      "messageId": "message-dfde33c2-17da-4890-8ccf-d90ca62571af",
+      "messageId": "message-hello",
       "sequence": 2,
-      "createdAt": "2026-08-29T13:45:16.972Z",
-      "actorId": "sample-self",
-      "text": "hi"
-    },
-    {
-      "messageId": "message-88c242fc-0312-412d-b1bf-458f5fbfd614",
-      "sequence": 3,
-      "createdAt": "2026-08-29T13:45:19.875Z",
+      "createdAt": "2026-08-29T12:00:01.000Z",
       "actorId": "sample-self",
       "text": "hello"
     },
     {
-      "messageId": "message-fb5e2110-18da-4f19-b73e-b0be3b34acca",
-      "sequence": 4,
-      "createdAt": "2026-08-29T13:45:22.005Z",
+      "messageId": "message-world",
+      "sequence": 3,
+      "createdAt": "2026-08-29T12:00:02.000Z",
       "actorId": "sample-self",
-      "text": "hey"
-    },
-    {
-      "messageId": "message-5561bd4f-f26d-4d0c-91bf-7dcde6876317",
-      "sequence": 5,
-      "createdAt": "2026-08-30T18:37:12.804Z",
-      "actorId": "sample-self",
-      "text": "hi"
+      "text": "world"
     }
   ]
 }
