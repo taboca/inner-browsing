@@ -138,6 +138,8 @@ main acceptance case. Open <http://localhost:4420/> after starting the server.
 The page contains only the sample surface—there is no demo selector, outer
 header, footer, or permanent inspector.
 
+![Inner Browsing Chat showing three message shells with projected Widget Post-it content](./image.png)
+
 The canonical sample tree is:
 
 ```text

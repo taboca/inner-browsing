@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "nextSequence": 4,
+  "nextSequence": 5,
   "messages": [
     {
       "messageId": "message-1",
@@ -22,6 +22,13 @@
       "createdAt": "2026-08-29T12:00:02.000Z",
       "actorId": "sample-self",
       "text": "world"
+    },
+    {
+      "messageId": "message-a5660b22-0178-4d9b-95c6-4d9fde1f4106",
+      "sequence": 4,
+      "createdAt": "2026-08-30T18:47:37.972Z",
+      "actorId": "sample-self",
+      "text": "hi"
     }
   ]
 }
