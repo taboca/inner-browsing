@@ -2,240 +2,149 @@
 
 ## Introduction
 
-**Inner Browsing** is a server-led model for lifecycle-managed applets. Its
-distinguishing choice is not merely that the server sends data to browser
-components. The server maintains the structural application, owns the state
-from which browser changes follow, and gives every applet a server companion
-as well as a client companion.
+Web interfaces begin with HTML elements: a message list, a form, a panel, a
+button, or a region where another tool should appear. As those elements gain
+application behavior, developers usually turn them into components with local
+state and lifecycle methods.
 
-The browser remains responsible for DOM materialization and interaction. It is
-not required to rediscover application structure, reconstruct authoritative
-state, or carry business operations between unrelated UI elements. It consumes
-ordered server snapshots and reconciles local HTML against them.
+The difficult part begins when the interface must remain consistent with work
+performed on the server. The browser may be reloaded, a server process may
+change the application without a click, several components may depend on one
+accepted operation, and a dynamic component may need to reappear in a newly
+created part of the layout. If the browser is the only place that remembers
+component structure and context, recovery and synchronization become separate
+application problems.
 
-### 1. Every client applet has a server-side companion
+Inner Browsing keeps that context on the server. It represents each managed UI
+unit as an **applet** with a server side and a client side. The server maintains
+the registered applet structure and its state. The browser receives snapshots
+of that structure and materializes the corresponding HTML and interactions.
+The result is a component model in which browser behavior remains flexible but
+is derived from server-held application context.
 
-Every registered applet definition provides a server companion and a client
-companion. Activating a canonical path creates its retained server companion;
-materializing the corresponding snapshot creates its retained browser
-companion. A projected instance similarly has one server companion identified
-by `projectionKey` and, while bound to a visible DOM target, one client
-companion with that same identity.
+The model is built from four supporting ideas.
 
-The source convention makes the pairing visible as sibling responsibilities
-under one applet definition:
+### 1. Client applets are bound to server applets
+
+An applet is a registered unit of application behavior. It has one definition,
+a server companion, and a browser companion:
 
 ```text
 applet/
-├── index.js                 shared definition and identity
-├── server/index.js          required server lifecycle companion
-├── server/operations.js     optional server operations companion
+├── index.js                 registration and shared identity
+├── server/index.js          server lifecycle companion
+├── server/operations.js     optional operation handling
 └── client/index.js          browser lifecycle companion
 ```
 
-This is a reflection contract, not a claim that both sides must always be
-present at the same moment. Every materialized client has a server-side
-counterpart, but a server companion can legitimately outlive a browser
-materialization. A durable projected applet may remain active while it is off
-page or while a browser reloads. The next client is reconstructed from the
-server-owned definition and state rather than from an old DOM or JavaScript
-object.
+When the application activates an applet, its server companion is initialized
+and retained by the server runtime. A browser receiving that application state
+initializes the matching client companion and gives it a small lifecycle for
+initializing, mounting, updating, and destroying its local interface.
 
-The companion relationship makes lifecycle and recovery predictable:
+The client is therefore a materialization of a server-held applet, rather than
+an unrelated component that the server must rediscover. Every materialized
+client applet has a server counterpart. The reverse does not have to be true at
+every moment: a server applet can remain active while a browser reloads or
+while its client is temporarily outside the visible layout. This asymmetry is
+what allows the interface to be reconstructed from retained context.
+
+The App Composer manages the registered application tree with three commands:
 
 ```text
-registered definition
-        ↓
-server companion + authoritative state
-        ↓ publish snapshot
-client companion + browser-local DOM
+load       activate an applet and any missing parents
+update     replace the state of an active applet
+destroy    remove an applet and its active descendants
 ```
 
-### 2. State is server-owned, structural, and continuously inspectable
+Those commands keep the server lifecycle and the browser lifecycle aligned.
+They can be requested by application code, an external control surface, or a
+server companion; composition does not have to begin with a UI interaction.
 
-Inner Browsing maintains two explicit server-side structures:
+### 2. Components follow server-held state
 
-- the canonical App Composer tree, whose paths preserve parent/child topology
-  and canonical applet state; and
-- the Projection Map, whose keyed records preserve repeated applet identity,
-  state, host ownership, and logical destination without turning every
-  instance into a route.
+The server keeps state next to the applet structure. Each active applet has a
+scoped state value and a hash of that value. The full application tree also has
+a hash. Repeated projected applets are kept in a separate server map, where
+each projected instance has its own key, state, and state hash.
 
-The server publishes complete ordered snapshots of those structures. The
-navigator compares canonical `stateHash` values and projected
-`appletStateHash` values, then initializes, updates, retains, or destroys client
-companions as a consequence. Client synchronization is therefore derived from
-server-controlled state by definition; it is not an independent browser-side
-business-state protocol.
+After an accepted change, the runtime publishes a complete snapshot. The
+browser compares the new hashes with the ones it previously materialized:
 
 ```text
-server event or accepted operation
-        ↓
-serialized structural/state mutation
-        ↓
-new server snapshot
-        ↓
-browser reconciliation
-        ↓
-downstream DOM lifecycle
+new applet path          → initialize and mount its client
+changed state hash       → update the retained client
+missing applet path      → destroy the client
+unchanged state hash     → retain the client as it is
 ```
 
-### 3. Business operations are server-first
+This makes browser synchronization a consequence of server state. The browser
+does not need a second business-state protocol to decide which managed
+components changed, and a new browser can rebuild the same application from a
+current snapshot.
 
-A client applet does not directly mutate framework or business state. It sends
-a path-scoped or `projectionKey`-scoped intent. The runtime delivers that
-intent to the matching server operations companion, where application services
-can validate it, perform business work, and request a canonical or projected
-state mutation. The resulting snapshot then drives the client update.
-
-The operations companion is optional because not every applet needs an
-interactive command surface. When an applet does accept client operations,
-however, that server companion is the required boundary for them.
+An operation is not itself a state snapshot. An operation, lifecycle method,
+or other server event may perform application work and then request one or more
+state or structure changes. Each accepted framework change produces the next
+ordered snapshot:
 
 ```text
-UI intent
-  → scoped applet operation
-  → server operations companion
-  → application/domain service
-  → App Composer or Projection Manager mutation
+operation or server event
+        ↓
+application work
+        ↓
+App Composer or Projection Manager change
+        ↓
+server snapshot
+        ↓
+browser lifecycle updates
+```
+
+### 3. Operations provide a server boundary for application behavior
+
+Interactive applets often need more than generic `load`, `update`, and
+`destroy` commands. A Chat applet, for example, needs an operation such as
+`Send message`. The client sends the operation name and its input through a
+service already scoped to that applet. It does not directly edit server state
+or call another applet.
+
+The runtime delivers the request to the corresponding server operations
+companion. That companion is the place to validate the request, call
+application or business services, and translate the result into App Composer
+or Projection Manager changes:
+
+```text
+client interaction
+  → applet-scoped operation request
+  → matching server operations companion
+  → application logic and persistence
+  → state or structure change
   → published snapshot
-  → client reconciliation
+  → browser reconciliation
 ```
 
-The UI is consequently a client of the operation interface and a consumer of
-the resulting state, not the place where business coordination has to live.
-The same application can also change from the inside out: a server lifecycle,
-server operation, external command, or other authorized server event can
-compose applets or update their state even when no UI gesture initiated the
-change. No business rule needs to be hidden in the connective code between
-visual elements.
+Not every applet needs an operations companion. When an applet accepts
+interactive operations, however, its server companion is the required
+boundary. Business rules do not have to be distributed among buttons, event
+handlers, and unrelated client components.
 
-### 4. Developers intermediate layout mounting through projections
+The same model also allows changes from the inside out. Server lifecycle code,
+operation handlers, background integrations, or other authorized server code
+can use the runtime without fabricating a browser event. The current commander
+demonstrates external composition by sending `load`, `update`, and `destroy`.
+Named applet operations use separate browser-to-server operation transports;
+the commander does not expose those named operations yet.
 
-Server authority does not mean that the server manipulates the DOM. A
-Projection Map record declares **what** projected applet should exist, its
-stable identity and state, **which canonical host** owns it, and a logical
-`targetKey`. The host's client companion remains the layout intermediary: it
-creates the appropriate local HTML and binds the `projectionKey` to the exact
-`HTMLElement` through a binding frame. Only then does the navigator materialize
-the projected client inside that target.
+### 4. Projections allow the client layout to be composed and recomposed
 
-```text
-server Projection Map record             host client layout
-projectionKey + hostPath + targetKey      projectionKey + HTMLElement
-                     \                    /
-                      \                  /
-                       navigator joins them
-                                ↓
-                    projected client materialization
-```
+Some applets belong to the registered application tree. Others may appear many
+times inside a host: one widget per message, one card per record, or one tool
+per workspace item. The server must retain the identity and state of these
+instances, but it should not dictate an exact `HTMLElement` or require every
+instance to become an application route.
 
-This separation lets the server control identity, state, ownership, and
-recovery while the developer controls responsive layout and the precise mount
-element. Here, **projection** is the framework's explicit bridge between a
-server-declared projected instance and a developer-selected browser target. It
-does not mean that the server stores or addresses an `HTMLElement`.
-
-In this README, **Projection Map** is therefore a formal Inner Browsing
-materialization concept. It is not automatically an application-domain
-Projection or read-model calculation. An application may use such a
-calculation to produce `appletState`, but that is a separate layer.
-
-### 5. Why separate these concerns
-
-Modern client frameworks made it practical to describe interfaces as functions
-of state, but routing, business state, component identity, server
-synchronization, recovery, and DOM placement do not necessarily belong to one
-browser-owned tree. Inner Browsing deliberately keeps these identities apart:
-
-```text
-routing structure       ≠ every component instance
-server state            ≠ browser DOM
-projected applet state  ≠ canonical route state
-logical target          ≠ HTMLElement identity
-UI event                ≠ business operation implementation
-```
-
-The included Chat sample makes this orientation concrete. Chat is a canonical
-applet that owns message ordering, selection, its composer and layout. Each
-message shell can host a projected Widget Post-it that owns the inner rendered
-content. Sending a message reaches the Chat server operations companion,
-persists the application message, registers a server-side projection, and
-publishes framework state. Chat then creates the browser-local shell, chooses
-the content target, and binds the projection so the navigator can materialize
-the Post-it.
-
-Pagination and reload follow the same model. A projected widget can disappear
-from the browser while its durable projection and server companion remain
-available for later materialization.
-
-Chat is deliberately a small proving ground. The same primitives point toward
-applications composed from independently stateful tools, panels, documents,
-assistants, media, inspectors, or generated UI without requiring every dynamic
-instance to become a route or forcing all state into one client-side store.
-Inner Browsing is therefore less an attempt to replace component frameworks
-than an experiment in changing where application coordination lives.
-
-## Framework solution: server-led contracts
-
-The framework turns that orientation into a serialized server runtime and a
-derived browser lifecycle:
-
-```text
-server lifecycles + server operations companions
-                         │
-                  serialized runtime
-                         │
-       ┌─────────────────┴──────────────────┐
-       │                                    │
-canonical App Composer tree            Projection Map
-paths + hierarchical state       keyed instances + state + host
-       │                                    │
-       └────────── complete snapshot ───────┘
-                         │
-                  browser navigator
-                         │
-       canonical clients + host-mediated projected clients
-```
-
-| Concern | Framework contract |
-| --- | --- |
-| Registration | Every applet definition is explicitly registered as `canonical` or `projected`. |
-| Companion reflection | Every materialized client applet has a server companion with the same canonical path or `projectionKey`; a server companion may remain active without a current browser binding. |
-| Canonical composition | `load`, `update`, and `destroy` operate on registered paths and preserve lifecycle order. |
-| Projected instances | The Projection Map owns repeated instance identity, state, host metadata, and logical destination. |
-| Identity | A canonical path identifies a composed canonical applet; `projectionKey` identifies one projected instance. |
-| Placement | `hostPath + targetKey` names a logical destination; the host developer binds the projection to the actual browser-local `HTMLElement`. |
-| State ownership | Canonical state belongs to the App Composer tree. Projected `appletState` belongs to the Projection Map. |
-| Hashing | `treeHash` and `projectionHash` are independent change domains. Hashes detect content changes; they are not entity identities. |
-| Operations | Client intents are scoped to a canonical path or `projectionKey` and handled by the corresponding server operations companion before accepted mutations publish. |
-| Rehydration | Canonical nodes restore from the state tree. Durable projections restore from self-sufficient Projection Map records. |
-| Publication | Canonical and projection mutations share one serialized runtime queue and publish complete snapshots in order. |
-
-### Canonical composition
-
-Canonical applets form the routing and composition hierarchy. Registry
-definitions declare their parent path, accepted child segment, and static
-parent anchor. The runtime retains one server companion per active canonical
-path. Each browser independently retains its corresponding client companion
-while that path is materialized and applies lifecycle work in a deterministic
-order:
-
-```text
-load       create missing lineage → initialize → mount
-update     replace state → retain companion → notify client
-destroy    destroy descendants first → destroy parent
-```
-
-Canonical state is persisted by `stateTreeStore`. Updating one node changes
-its `stateHash`, ancestor hashes, and `treeHash`. A server companion can issue
-App Composer commands from `init` or from an operations handler, so canonical
-composition does not require a browser-originated event.
-
-### Projected materialization
-
-A projected definition can have many simultaneous instances. Each Projection
-Map record is self-sufficient:
+A **projection** holds the server-side part that can exist before, after, or
+without a current browser mount:
 
 ```js
 {
@@ -243,77 +152,34 @@ Map record is self-sufficient:
   hostPath: 'app/samples/chat',
   targetKey: 'message-157',
   appletPath: 'app/samples/chat/widget-postit',
-  hostData: { messageId, sequence, actorId, createdAt },
-  appletState: { text },
-  persistence: 'durable'
+  appletState: { text: 'hello' }
 }
 ```
 
-The server gives each canonical host a path-scoped Projection Manager:
+The projected applet keeps its state in that local scope. Its host client
+receives the available projection records, creates or rearranges the
+surrounding layout, and binds each visible `projectionKey` to an actual DOM
+element. The navigator then joins the server record with that browser binding
+and mounts the client applet there:
 
 ```text
-register / ensure / updateState / updateHostData / destroy / list
+server projection                         client layout
+identity + state + logical target         projectionKey + HTMLElement
+                      \                    /
+                       navigator joins them
+                                ↓
+                    projected client applet
 ```
 
-`appletState` intentionally remains inside the record. It is authoritative for
-that projected runtime instance and can rehydrate it after browser reload or
-server restart without entering the canonical routing tree. This is not a
-duplicate of a separate applet-instance record. A future model that shares one
-instance across several placements would require another store and an
-`instanceId`.
+This intermediate binding is what lets a layout be recomposed. After a reload,
+pagination change, or local rearrangement, the host may create different DOM
+elements and bind the same retained projections again. The server continues to
+control applet identity and state, while the client controls the concrete
+arrangement appropriate to that browser.
 
-Registering a projection also initializes its server companion. Browser
-materialization is downstream and conditional on the host providing a current
-binding. The companion and record can therefore remain active when the
-projected client is temporarily absent.
-
-`projectionKey` is stable while state changes. `appletPath` identifies the
-shared definition, while `appletStateHash` identifies current serialized
-content only. Hundreds of projected instances may share both the applet path
-and content hash while retaining different projection keys.
-
-### Independent hash contract
-
-The navigation envelope transports both state domains without combining their
-identity:
-
-```js
-{
-  hash: treeHash,
-  treeHash,
-  projectionHash,
-  projectionMap: { hash: projectionHash, records }
-}
-```
-
-`snapshot.hash` remains the canonical `treeHash` for compatibility. A
-projection-only change leaves canonical routing hashes unchanged. The browser
-navigator reconciles every published snapshot by its canonical and projected
-records, so it does not need a combined navigation hash as a delivery gate.
-
-`projectionHash` remains a compact change detector for diagnostics, tests,
-caches, and eventual selective transport. It is not required for identity or
-rehydration.
-
-### Browser bindings and projected lifecycle
-
-The host applet receives a read-only, path-scoped Projection Map view. It owns
-its surrounding layout and associates visible projection keys with current DOM
-targets through an exact binding frame:
-
-```text
-begin frame
-  → bind every currently visible projectionKey to its content target
-commit frame
-  → materialize new projected clients
-  → retain unchanged clients
-  → destroy only clients absent from the final frame
-```
-
-An abandoned render cannot remove live projected clients. A projection without
-a binding is valid pending state: pagination can later create a new target and
-materialize the same projection again. The server never stores or inspects DOM
-references.
+Projection is used here as a materialization concept. It does not necessarily
+mean an application-domain read model or data calculation, although such a
+calculation may produce the state placed in a projection.
 
 ## Sample case: Chat with projected Post-its
 
@@ -324,7 +190,7 @@ header, footer, or permanent inspector.
 
 ![Inner Browsing Chat showing three message shells with projected Widget Post-it content](./image.png)
 
-The canonical sample tree is:
+The registered application tree is:
 
 ```text
 app
@@ -334,37 +200,37 @@ app
 
 Chat owns message ordering, green message shells, metadata, selection, the
 composer, and the ten-most-recent visible window. Each shell exposes one
-content target. A projected `app/samples/chat/widget-postit` instance owns only
+content target. A projected `app/samples/chat/widget-postit` applet owns only
 the inner `<article><em>…</em></article>` subtree.
 
-The sample keeps three ownership layers explicit:
+The sample keeps three areas of state separate:
 
-| Layer | Sample responsibility |
+| Area | Responsibility |
 | --- | --- |
 | Chat message store | Durable application messages. The checked-in seed is `#1`, `hello`, and `world`. |
-| Canonical Chat state | Selected message and last-action state participating in `treeHash`. |
-| Projection Map | Rehydratable Post-it identity, placement metadata, text state, and `projectionHash`. |
+| Chat applet state | Selected message and last action in the registered applet tree. |
+| Projection Map | Retained Post-it identity, placement information, text state, and change hash. |
 
-Sending a message exercises both framework domains:
+Sending a message follows the complete server-led path:
 
 ```text
 Send message
   → validate and persist the application message
   → register its durable Widget Post-it projection
-  → update retained canonical Chat activity state
+  → update the retained Chat applet state
   → publish ordered snapshots
-  → Chat creates or retains the shell and commits its binding frame
+  → Chat creates or retains the shell and binds its content target
   → navigator materializes the projected Widget Post-it inside the target
 ```
 
-Chat displays the ten most recent Projection Map records. Moving from records
+Chat displays the ten most recent projection records. Moving from records
 91–100 to 92–101 retains nine projected clients, removes only the off-page
-client for 91, and mounts 101. Projection 91 remains durable and can be
+client for 91, and mounts 101. Projection 91 remains on the server and can be
 materialized again when a later page binds it.
 
 The projected widget is physically nested under Chat because it belongs to
-this sample, while `instanceMode: 'projected'` keeps it outside the canonical
-tree:
+this sample, while `instanceMode: 'projected'` keeps it outside the registered
+application tree:
 
 ```text
 src/applets/app/applets/samples/applets/chat/
@@ -379,178 +245,6 @@ src/applets/app/applets/samples/applets/chat/
 See [README.sample.chat.md](README.sample.chat.md) for the detailed executable
 flow. The architectural decision record is
 [Chapter 7 — Projected Applet Materialization](https://github.com/taboca/labs-meetingbro/blob/main/project/README_MEMO_2026_08_30_100_chapter_7_projected_applet_materialization_and_chat_framework_update_plan.md).
-
-## FAQ: projection changes, reload, and lifecycle
-
-### Does Chat use projected `update()` to draw a new message?
-
-No. A new message registers a new projection. The changed Projection Map makes
-the navigator call Chat's `projectionsChanged()`, and Chat reconciles its
-message shells. After Chat binds the new projection to a content target, the
-navigator initializes and mounts a new Post-it client there.
-
-Projected `update()` has a narrower meaning: it is called when an already
-mounted projection keeps the same `projectionKey` but receives a different
-`appletStateHash`.
-
-```text
-new projection             → Chat projectionsChanged() → Post-it init() + mount()
-existing projected state   → retained Post-it update()
-canonical Chat state       → retained Chat update()
-```
-
-### How does Chat know that it needs one more message shell?
-
-The server publishes a complete Projection Map rather than a DOM instruction.
-The navigator compares its previous and next records by `projectionKey`; a key
-present only in the next map causes a `projectionsChanged()` notification for
-that projection's host.
-
-Chat then loops through its complete visible projection list. If a key is
-missing from `recordsByProjectionKey`, Chat calls `createMessageRecord()` and
-stores the result. The framework detects the state difference; application
-code decides that the difference should produce an `<li>`, header, button, and
-content `<div>`.
-
-### What does `recordsByProjectionKey` contain?
-
-It is Chat's private browser-local reconciliation cache:
-
-```text
-projectionKey
-  → shell          HTMLLIElement
-  → content        HTMLDivElement used as the projection binding target
-  → metadata       HTMLSpanElement
-  → selectButton   HTMLButtonElement
-  → select         event-handler function
-  → messageId      application identity string
-```
-
-It does not contain the Projection Map record, projected `appletState`, or the
-Post-it client instance. A more descriptive reading of the name is “Chat
-message views indexed by projection identity.”
-
-### Is `recordsByProjectionKey` durable?
-
-No. It is deliberately ephemeral. It exists only in one Chat client instance
-inside one browser runtime. Its absence means that Chat has not built a local
-shell for that visible projection yet.
-
-The durable/ephemeral pairing is:
-
-```text
-Projection Map record       durable declaration that the widget should exist
-recordsByProjectionKey      ephemeral evidence that Chat built its local shell
-DOM binding                 ephemeral placement in this browser
-```
-
-### Why does each message shell have a different border color?
-
-Chat assigns a random border color only when `createMessageRecord()` creates a
-new browser-local shell. The color is intentionally absent from canonical state
-and the Projection Map: it is a visual lifecycle probe, not application data.
-
-```text
-same retained shell       → same border color
-new message shell         → new random color
-browser reload            → all visible shells are rebuilt with new colors
-off-page shell returns    → rebuilt with a new color
-```
-
-This makes ephemeral reconstruction visible. The durable projection identity
-and Post-it state remain the same even when a newly created shell receives a
-different border.
-
-### What happens during a browser reload?
-
-The old DOM, Chat client, shell cache, bindings, and Post-it clients disappear.
-The server Projection Map remains. The new browser receives a complete
-snapshot and creates a new navigator.
-
-The navigator initializes Chat with a scoped Projection Map. Chat's new,
-initially empty `recordsByProjectionKey` causes `render()` to recreate every
-visible shell and commit new bindings. The navigator then matches each binding
-with its complete projection record and initializes a new Post-it client with
-the saved `appletState`.
-
-No special application reload handler is required. The same developer-written
-`init → render → bind` path reconstructs the interface.
-
-### How is projected state reattached after reload?
-
-State is not attached to an old JavaScript object. The navigator joins two new
-browser-side facts using the stable `projectionKey`:
-
-```text
-Projection Map record                    Chat binding
-projectionKey + complete appletState     projectionKey + new HTMLElement
-                       ↓
-                projected client init(state)
-                       ↓
-                       mount(element)
-```
-
-`init()` receives complete state when a browser client is new. `update()` is
-reserved for a retained client whose state later changes.
-
-### Which browser library performs the materialization?
-
-`public/runtime/bootstrap.js` receives snapshots and calls
-`navigator.reconcile()`. `public/runtime/navigator.js` compares records,
-invokes canonical lifecycle callbacks, matches projections to bindings,
-imports projected client modules, and calls their `init`, `mount`, `update`,
-and `destroy` methods. `public/runtime/projectionMap.js` supplies Chat's scoped
-record view and exact binding-frame API. `refDoc.js` provides scoped DOM work.
-
-### Are projected widgets retained on the server while the browser reloads or paginates?
-
-Yes. Projection records and projected server companions are independent of
-browser bindings. Off-page widgets remain server-side even when their local
-browser clients are destroyed.
-
-- Browser reload: server companion remains; browser client is recreated.
-- Pagination: off-page browser client may be destroyed; server companion and
-  record remain.
-- Server restart with a `durable` record: the record reloads and a new server
-  companion is initialized.
-- Server restart with a `runtime` record: the projection disappears.
-- Projection `destroy`: both its record and server companion are removed.
-
-The current prototype retains one server companion per projection, including
-off-page projections. A larger system could later introduce lazy server
-activation without changing browser binding identity.
-
-### Why does a repeated snapshot not create duplicate message shells?
-
-Chat keys its local records by `projectionKey`. If a visible key is already in
-`recordsByProjectionKey`, `render()` reuses the existing shell, refreshes its
-metadata and selected class, and recommits the binding. Creation happens only
-when the key is absent.
-
-When the visible window already contains ten messages, a new projection removes
-the oldest local shell and creates the newest one. The durable older projection
-is not destroyed and can materialize again later.
-
-### How can local state be purged?
-
-Stop the server before deleting persistence files. To clear canonical and
-projected framework state while preserving Chat messages:
-
-```bash
-rm -rf db/state/app
-rm -f db/projections/index.json
-```
-
-The next load recreates canonical state and projections from the retained
-message store. To additionally replace current Chat messages with the committed
-sample (`#1`, `hello`, and `world`), knowingly discard local message changes:
-
-```bash
-git restore -- db/samples/chat/messages.json
-```
-
-`npm run command -- destroy app` clears canonical composition while the server
-is running, but intentionally preserves projected records and Chat messages.
 
 ## Run and verify
 
@@ -574,12 +268,12 @@ SAMPLE_DATA_ROOT=/tmp/inner-browsing-samples \
 npm start
 ```
 
-- `STATE_ROOT` owns canonical composition and canonical applet state.
-- `PROJECTION_ROOT` owns durable projected records.
+- `STATE_ROOT` owns the registered applet tree and its state.
+- `PROJECTION_ROOT` owns retained projection records.
 - `SAMPLE_DATA_ROOT` owns the Chat application's durable messages.
 
 The server also exposes `/api/snapshot`, `/api/commands`, Socket.IO navigation
-and operation transports, and the canonical composer CLI:
+and operation transports, and the App Composer CLI:
 
 ```bash
 npm run command -- load app/samples/chat
@@ -591,26 +285,26 @@ npm run command -- destroy app/samples/chat
 
 ```text
 server.js                         HTTP and Socket.IO boundary
-commander/                        canonical composition CLI and scenarios
-src/appletRegistry.js             canonical/projected definition registry
-src/stateTreeStore.js             canonical state and tree hashing
-src/projectionStore.js            durable/runtime Projection Map records
-src/appletRuntime.js              mutation serialization and server lifecycles
+commander/                        composition CLI and scenarios
+src/appletRegistry.js             registered applet definitions
+src/stateTreeStore.js             application tree state and hashing
+src/projectionStore.js            retained/runtime projection records
+src/appletRuntime.js              mutation ordering and server lifecycles
 src/stableJson.js                 shared JSON validation and stable hashing
-public/runtime/navigator.js       canonical and projected client reconciliation
-public/runtime/projectionMap.js   safe host views and atomic binding frames
-src/applets/.../chat/             default Chat host and projected widget sample
+public/runtime/navigator.js       snapshot-to-client reconciliation
+public/runtime/projectionMap.js   host views and atomic DOM binding frames
+src/applets/.../chat/             Chat host and projected widget sample
 test/                             store, runtime, browser, Chat, and CLI coverage
 ```
 
 ## Prototype boundary
 
-This repository implements a shared single-application runtime. Each browser
-has independent DOM bindings and client companions, while canonical state and
-the server Projection Map are shared. Authentication, per-user projection
-filtering, multi-process coordination, viewport virtualization, multiple
-placements for one projected instance, and general transactions remain outside
-this pass.
+This repository implements one shared application runtime. Each browser has
+independent DOM bindings and client companions, while the registered applet
+state and server projection records are shared. Authentication, per-user
+projection filtering, multi-process coordination, viewport virtualization,
+multiple placements for one projected instance, and general transactions
+remain outside this pass.
 
 ## License
 

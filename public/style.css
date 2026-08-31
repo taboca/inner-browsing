@@ -63,14 +63,15 @@ main {
 .chat-message {
   margin: 0 0 .75rem;
   padding: .75rem;
-  border: 1px solid #347a62;
+  border: 2px solid var(--chat-shell-border, #347a62);
   border-radius: .75rem;
   background: #103c30;
 }
 
 .chat-message.is-selected {
-  border-color: #7aebc4;
-  box-shadow: 0 0 0 2px #7aebc426;
+  outline: 2px solid #d8fff1;
+  outline-offset: 2px;
+  box-shadow: 0 0 0 4px #7aebc426;
 }
 
 .chat-message-header,

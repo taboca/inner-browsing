@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "nextSequence": 5,
+  "nextSequence": 9,
   "messages": [
     {
       "messageId": "message-1",
@@ -29,6 +29,34 @@
       "createdAt": "2026-08-30T18:47:37.972Z",
       "actorId": "sample-self",
       "text": "hi"
+    },
+    {
+      "messageId": "message-9519ff93-b4da-4e0d-8ddc-a44f90d9f05b",
+      "sequence": 5,
+      "createdAt": "2026-08-30T19:53:12.617Z",
+      "actorId": "sample-self",
+      "text": "new message"
+    },
+    {
+      "messageId": "message-c65faf1d-60b1-4e89-a7ed-0734afb404bf",
+      "sequence": 6,
+      "createdAt": "2026-08-30T19:59:53.854Z",
+      "actorId": "sample-self",
+      "text": "hi"
+    },
+    {
+      "messageId": "message-75215350-4a39-4381-80e5-d112d8dd7b75",
+      "sequence": 7,
+      "createdAt": "2026-08-30T20:04:40.843Z",
+      "actorId": "sample-self",
+      "text": "hi there"
+    },
+    {
+      "messageId": "message-dd7db5d1-2502-4080-a775-3165868fba57",
+      "sequence": 8,
+      "createdAt": "2026-08-31T12:16:33.866Z",
+      "actorId": "sample-self",
+      "text": "ola"
     }
   ]
 }

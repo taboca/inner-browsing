@@ -130,7 +130,7 @@ test('Chat send persists a message, a self-sufficient projection, and retained C
   }
 });
 
-test('Chat owns and retains shells while committing projected Post-it bindings', async () => {
+test('Chat owns and retains randomly colored shells while committing projected Post-it bindings', async () => {
   const document = { createElement: (tagName) => new FakeElement(tagName) };
   const host = new FakeElement('host');
   const refDoc = createRefDoc({ document, host, path: 'app/samples/chat' });
@@ -138,13 +138,15 @@ test('Chat owns and retains shells while committing projected Post-it bindings',
   const appletOperation = { async send(operation, data) { sent.push({ operation, data }); return { ok: true }; } };
   const firstMessage = { messageId: 'message-1', sequence: 1, actorId: 'sample-self', createdAt: 'now' };
   const projections = projectionMapFixture([clientProjection(firstMessage)]);
-  const instance = createChatClient();
+  const randomValues = [0.1, 0.5];
+  const instance = createChatClient({ random: () => randomValues.shift() });
   const firstState = { chat: { selectedMessageId: null, lastAction: null } };
   await instance.init({ state: firstState, refDoc, appletOperation, projectionMap: projections.service });
   await instance.mount({ refDoc });
 
   const firstShell = descendants(host).find((element) => element.dataset.messageId === 'message-1');
   assert.ok(firstShell);
+  assert.equal(firstShell.attributes.get('style'), '--chat-shell-border: hsl(36 78% 68%);');
   assert.ok(projections.bindings().has('projection-1'));
 
   const input = descendants(host).find((element) => element.tagName === 'input');
@@ -160,13 +162,31 @@ test('Chat owns and retains shells while committing projected Post-it bindings',
   const retainedFirstShell = descendants(host).find((element) => element.dataset.messageId === 'message-1');
   const secondShell = descendants(host).find((element) => element.dataset.messageId === 'message-2');
   assert.equal(retainedFirstShell, firstShell);
+  assert.equal(retainedFirstShell.attributes.get('style'), '--chat-shell-border: hsl(36 78% 68%);');
   assert.ok(secondShell);
+  assert.equal(secondShell.attributes.get('style'), '--chat-shell-border: hsl(180 78% 68%);');
   assert.match(retainedFirstShell.className, /is-selected/);
   assert.equal(projections.bindings().size, 2);
 
   const selectButton = retainedFirstShell.children[0].children.find((element) => element.tagName === 'button');
   await selectButton.trigger('click');
   assert.deepEqual(sent[1], { operation: 'Select message', data: { messageId: 'message-1' } });
+
+  const reloadedHost = new FakeElement('host');
+  const reloadedRefDoc = createRefDoc({ document, host: reloadedHost, path: 'app/samples/chat' });
+  const reloadedProjections = projectionMapFixture([clientProjection(firstMessage), clientProjection(secondMessage)]);
+  const reloadedInstance = createChatClient({ random: () => 0.75 });
+  await reloadedInstance.init({
+    state: secondState,
+    refDoc: reloadedRefDoc,
+    appletOperation,
+    projectionMap: reloadedProjections.service,
+  });
+  await reloadedInstance.mount({ refDoc: reloadedRefDoc });
+  const reloadedFirstShell = descendants(reloadedHost)
+    .find((element) => element.dataset.messageId === 'message-1');
+  assert.equal(reloadedFirstShell.attributes.get('style'), '--chat-shell-border: hsl(270 78% 68%);');
+  assert.notEqual(reloadedFirstShell.attributes.get('style'), firstShell.attributes.get('style'));
 });
 
 test('Chat materializes only the ten most recent projection bindings', async () => {

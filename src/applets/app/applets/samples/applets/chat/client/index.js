@@ -2,7 +2,12 @@ function orderedProjections(projectionMap) {
   return [...projectionMap.list()].sort((left, right) => left.hostData.sequence - right.hostData.sequence);
 }
 
-export function createClientApplet() {
+function createShellBorder(random) {
+  const hue = Math.floor(random() * 360);
+  return `hsl(${hue} 78% 68%)`;
+}
+
+export function createClientApplet({ random = Math.random } = {}) {
   let element;
   let flow;
   let count;
@@ -19,6 +24,7 @@ export function createClientApplet() {
       className: 'chat-message',
       'data-message-id': message.messageId,
       'data-projection-key': projection.projectionKey,
+      style: `--chat-shell-border: ${createShellBorder(random)};`,
     });
     const header = refDoc.create('div', { className: 'chat-message-header' });
     const metadata = refDoc.create('span', {
