@@ -1,6 +1,6 @@
 {
   "name": "@taboca/inner-browsing",
-  "version": "0.20.0",
+  "version": "0.1.0",
   "description": "Server-directed, lifecycle-managed applet composition with retained projections.",
   "keywords": [
     "applet",

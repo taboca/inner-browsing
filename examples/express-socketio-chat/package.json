@@ -1,6 +1,6 @@
 {
   "name": "@taboca/inner-browsing-example-express-socketio-chat",
-  "version": "0.20.0",
+  "version": "0.1.0",
   "private": true,
   "type": "module",
   "description": "Express and Socket.IO Chat example for @taboca/inner-browsing.",
@@ -15,7 +15,7 @@
     "check": "node --check server.js && find src public commander test -name '*.js' -type f -print0 | xargs -0 -n1 node --check && node --test test/*.test.js"
   },
   "dependencies": {
-    "@taboca/inner-browsing": "0.20.0",
+    "@taboca/inner-browsing": "0.1.0",
     "express": "^5.1.0",
     "socket.io": "^4.8.1",
     "socket.io-client": "^4.8.1"

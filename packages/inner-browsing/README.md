@@ -77,7 +77,7 @@ The runtime accepts State Tree and Projection Store implementations through
 its constructor. The `/node` implementations persist JSON atomically on the
 local filesystem. Their current contract is synchronous; remote database
 adapters require a future asynchronous store contract and are not claimed by
-version `0.20.0`.
+version `0.1.0`.
 
 ## Verify and publish
 
