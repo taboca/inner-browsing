@@ -1,5 +1,17 @@
 # Inner Browsing
 
+This repository is an npm workspace with two deliberately separate parts:
+
+```text
+packages/inner-browsing/             publishable @taboca/inner-browsing library
+examples/express-socketio-chat/      private runnable application
+```
+
+The library has no Express or Socket.IO dependency. The example chooses both,
+along with local JSON persistence for its Chat data. This keeps application
+server and transport choices outside the core package while preserving one
+complete executable reference.
+
 ## Introduction
 
 Web interfaces begin with HTML elements: a message list, a form, a panel, a
@@ -65,8 +77,8 @@ server companion; composition does not have to begin with a UI interaction.
 
 The server keeps state next to the applet structure. Each active applet has a
 scoped state value and a hash of that value. The full application tree also has
-a hash. Repeated projected applets are kept in a separate server map, where
-each projected instance has its own key, state, and state hash.
+a hash. These hashes let the browser recognize structural and state changes
+without making the browser the authority for either one.
 
 After an accepted change, the runtime publishes a complete snapshot. The
 browser compares the new hashes with the ones it previously materialized:
@@ -156,6 +168,11 @@ without a current browser mount:
 }
 ```
 
+Projections are kept in a separate server map. Each record has its own stable
+`projectionKey`, local applet state, and state hash, so repeated applets can
+change independently without becoming branches of the registered application
+tree.
+
 The projected applet keeps its state in that local scope. Its host client
 receives the available projection records, creates or rearranges the
 surrounding layout, and binds each visible `projectionKey` to an actual DOM
@@ -181,14 +198,44 @@ Projection is used here as a materialization concept. It does not necessarily
 mean an application-domain read model or data calculation, although such a
 calculation may produce the state placed in a projection.
 
+## Package boundary
+
+The package exposes three initial entry points:
+
+```js
+import {
+  createAppletRegistry,
+  createAppletRuntime,
+  createRuntimeProtocol,
+} from '@taboca/inner-browsing';
+
+import { createBrowserRuntime } from '@taboca/inner-browsing/browser';
+
+import {
+  createStateTreeStore,
+  createProjectionStore,
+} from '@taboca/inner-browsing/node';
+```
+
+The default export owns logical applet registration, lifecycle, composition,
+projections, and transport-neutral request handlers. `/browser` owns DOM
+materialization with injected operation senders. `/node` provides the current
+synchronous filesystem store adapters and browser-asset location helper.
+
+Express, Socket.IO, application applets, and domain stores are not library
+dependencies. A server adapter invokes the runtime protocol and supplies the
+runtime's `publish` callback; a browser transport calls the transport-neutral
+browser runtime's `apply()` method when snapshots arrive.
+
 ## Sample case: Chat with projected Post-its
 
-Chat is the default route, the only browser demonstration, and the framework's
-main acceptance case. Open <http://localhost:4420/> after starting the server.
+The private Express + Socket.IO Chat workspace is the default runnable
+demonstration and the framework's main application acceptance case. Open
+<http://localhost:4420/> after starting the workspace.
 The page contains only the sample surface—there is no demo selector, outer
 header, footer, or permanent inspector.
 
-![Inner Browsing Chat showing three message shells with projected Widget Post-it content](./image.png)
+![Inner Browsing Chat showing three message shells with projected Widget Post-it content](./examples/express-socketio-chat/image.png)
 
 The registered application tree is:
 
@@ -233,7 +280,7 @@ this sample, while `instanceMode: 'projected'` keeps it outside the registered
 application tree:
 
 ```text
-src/applets/app/applets/samples/applets/chat/
+examples/express-socketio-chat/src/applets/app/applets/samples/applets/chat/
 ├── client/
 ├── server/
 └── applets/
@@ -242,7 +289,8 @@ src/applets/app/applets/samples/applets/chat/
         └── server/
 ```
 
-See [README.sample.chat.md](README.sample.chat.md) for the detailed executable
+See the [Express + Socket.IO Chat example
+README](examples/express-socketio-chat/README.md) for the detailed executable
 flow. The architectural decision record is
 [Chapter 7 — Projected Applet Materialization](https://github.com/taboca/labs-meetingbro/blob/main/project/README_MEMO_2026_08_30_100_chapter_7_projected_applet_materialization_and_chat_framework_update_plan.md).
 
@@ -259,7 +307,22 @@ npm start
 npm run check
 ```
 
-Use independent persistence roots for isolated runs:
+To inspect the exact public tarball without publishing it:
+
+```bash
+npm run pack:check
+```
+
+When the package metadata and version are ready for a release, publishing is
+scoped to the library workspace; the example is marked `private` and cannot be
+published accidentally:
+
+```bash
+npm publish --workspace @taboca/inner-browsing --access public
+```
+
+The root scripts delegate to the private example workspace. Use independent
+persistence roots for isolated runs:
 
 ```bash
 STATE_ROOT=/tmp/inner-browsing-state \
@@ -284,17 +347,15 @@ npm run command -- destroy app/samples/chat
 ## Source map
 
 ```text
-server.js                         HTTP and Socket.IO boundary
-commander/                        composition CLI and scenarios
-src/appletRegistry.js             registered applet definitions
-src/stateTreeStore.js             application tree state and hashing
-src/projectionStore.js            retained/runtime projection records
-src/appletRuntime.js              mutation ordering and server lifecycles
-src/stableJson.js                 shared JSON validation and stable hashing
-public/runtime/navigator.js       snapshot-to-client reconciliation
-public/runtime/projectionMap.js   host views and atomic DOM binding frames
-src/applets/.../chat/             Chat host and projected widget sample
-test/                             store, runtime, browser, Chat, and CLI coverage
+packages/inner-browsing/src/core/       registry, App Composer, runtime, protocol
+packages/inner-browsing/src/browser/    transport-neutral browser reconciliation
+packages/inner-browsing/src/node/       filesystem stores and Node hashing
+packages/inner-browsing/test/           package contract and lifecycle coverage
+examples/express-socketio-chat/server.js Express and Socket.IO adapter
+examples/express-socketio-chat/public/   Socket.IO browser bootstrap and CSS
+examples/express-socketio-chat/src/      sample applets and Chat domain store
+examples/express-socketio-chat/db/       sample application and framework data
+examples/express-socketio-chat/test/     sample integration and CLI coverage
 ```
 
 ## Prototype boundary

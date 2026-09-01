@@ -16,11 +16,27 @@ The sample has one local actor, plain text of at most 500 characters, durable
 JSON storage, and no authentication, presence, edits, attachments, or
 multi-user isolation.
 
+## Framework boundary
+
+This workspace is a private application and will not be published to npm. It
+chooses Express, Socket.IO, and local JSON application storage, while importing
+the registry/runtime protocol, browser materializer, and filesystem framework
+stores from `@taboca/inner-browsing`. Replacing the web server or transport
+does not require changing the core package.
+
 ## Run
+
+From the repository root:
 
 ```bash
 npm install
 npm start
+```
+
+Or target this workspace explicitly:
+
+```bash
+npm start --workspace @taboca/inner-browsing-example-express-socketio-chat
 ```
 
 Open <http://localhost:4420/>. The root loads `app/samples/chat`; the explicit
@@ -148,7 +164,7 @@ projection-aware consumers as a compact change detector.
 ## Verification
 
 ```bash
-npm run check
+npm run check:example
 ```
 
 Coverage includes durable/runtime restoration, JSON validation, equal state

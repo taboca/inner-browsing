@@ -1,7 +1,7 @@
 import { io } from 'socket.io-client';
 import readline from 'node:readline';
+import { isComposerOperation } from '@taboca/inner-browsing';
 import { loadScenario, runScenario } from './scenarioRunner.js';
-import { isComposerOperation } from '../src/composerOperations.js';
 
 const serverUrl = process.env.INNER_BROWSING_URL || process.env.NAVIGATOR_URL || 'http://localhost:4420';
 const socket = io(serverUrl, { transports: ['websocket'] });

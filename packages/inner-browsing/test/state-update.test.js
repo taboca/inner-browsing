@@ -3,10 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { createNavigator } from '../public/runtime/navigator.js';
-import { createAppletRegistry } from '../src/appletRegistry.js';
-import { createAppletRuntime } from '../src/appletRuntime.js';
-import { createStateTreeStore } from '../src/stateTreeStore.js';
+import { createNavigator } from '../src/browser/navigator.js';
+import { createAppletRuntime } from '../src/core/appletRuntime.js';
+import { createStateTreeStore } from '../src/node/stateTreeStore.js';
+import { createTestRegistry } from './testRegistry.js';
 
 function nodeAt(snapshot, appletPath) {
   let match = null;
@@ -20,7 +20,7 @@ function nodeAt(snapshot, appletPath) {
 
 function stateFixture() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'inner-browsing-update-'));
-  const registry = createAppletRegistry();
+  const registry = createTestRegistry();
   const store = createStateTreeStore({
     stateRoot: directory,
     registry,
@@ -61,22 +61,22 @@ function oneAppletRegistry({ onInit = () => {}, handle = null } = {}) {
 test('update replaces active applet state while preserving tree and framework metadata', () => {
   const { directory, store } = stateFixture();
   try {
-    const before = store.load('app/samples/chat', {
+    const before = store.load('app/workspace/chat', {
       stale: 'remove-me',
       nested: { value: 'before' },
     }).snapshot;
-    const beforeTarget = nodeAt(before, 'app/samples/chat');
-    const beforeParent = nodeAt(before, 'app/samples');
-    const result = store.update('app/samples/chat', {
+    const beforeTarget = nodeAt(before, 'app/workspace/chat');
+    const beforeParent = nodeAt(before, 'app/workspace');
+    const result = store.update('app/workspace/chat', {
       nested: { value: 'after' },
       present: false,
       activatedAt: 'caller-cannot-replace-this',
     });
     const after = result.snapshot;
-    const afterTarget = nodeAt(after, 'app/samples/chat');
-    const afterParent = nodeAt(after, 'app/samples');
+    const afterTarget = nodeAt(after, 'app/workspace/chat');
+    const afterParent = nodeAt(after, 'app/workspace');
 
-    assert.deepEqual(result.updated, ['app/samples/chat']);
+    assert.deepEqual(result.updated, ['app/workspace/chat']);
     assert.deepEqual(after.activePaths, before.activePaths);
     assert.equal(afterTarget.parentPath, beforeTarget.parentPath);
     assert.equal(afterTarget.parentAnchor, beforeTarget.parentAnchor);
@@ -98,10 +98,10 @@ test('update rejects unknown, inactive, and non-object targets without changing 
   const { directory, store } = stateFixture();
   try {
     assert.throws(() => store.update('app/missing', {}), /Unknown applet/);
-    assert.throws(() => store.update('app/samples', {}), /inactive applet/);
-    store.load('app/samples');
+    assert.throws(() => store.update('app/workspace', {}), /inactive applet/);
+    store.load('app/workspace');
     const before = store.snapshot();
-    assert.throws(() => store.update('app/samples', []), /plain object/);
+    assert.throws(() => store.update('app/workspace', []), /plain object/);
     assert.equal(store.snapshot().hash, before.hash);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });

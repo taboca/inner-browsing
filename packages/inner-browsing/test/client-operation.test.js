@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import test from 'node:test';
-import { createNavigator } from '../public/runtime/navigator.js';
+import { createNavigator } from '../src/browser/navigator.js';
 
 test('navigator gives a canonical client an operation sender scoped to its path', async () => {
   let clientContext;

@@ -3,15 +3,18 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import express from 'express';
 import { Server as SocketIOServer } from 'socket.io';
+import { createAppletRuntime, createRuntimeProtocol } from '@taboca/inner-browsing';
+import {
+  browserRuntimeDirectory,
+  createProjectionStore,
+  createStateTreeStore,
+} from '@taboca/inner-browsing/node';
 import { createAppletRegistry } from './src/appletRegistry.js';
-import { createStateTreeStore } from './src/stateTreeStore.js';
-import { createAppletRuntime } from './src/appletRuntime.js';
-import { createProjectionStore } from './src/projectionStore.js';
 import { createChatMessageStore } from './src/samples/chatMessageStore.js';
-import { isComposerOperation } from './src/composerOperations.js';
 
 const rootDir = path.dirname(fileURLToPath(import.meta.url));
 const port = Number(process.env.PORT) || 4420;
+const host = process.env.HOST || '127.0.0.1';
 const app = express();
 const server = http.createServer(app);
 const io = new SocketIOServer(server);
@@ -32,6 +35,7 @@ const runtime = createAppletRuntime({
   projectionStore,
   publish: (envelope) => io.emit('navigator.snapshot', envelope),
 });
+const protocol = createRuntimeProtocol({ runtime });
 
 function serialize(value) {
   return JSON.stringify(value).replaceAll('<', '\\u003c');
@@ -42,11 +46,12 @@ function page(snapshot) {
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>Inner Browsing Chat</title><link rel="stylesheet" href="/style.css"><script src="/socket.io/socket.io.js"></script></head>
 <body><main><div id="applet-host"></div></main>
-<script id="initial-snapshot" type="application/json">${serialize(snapshot)}</script><script type="module" src="/runtime/bootstrap.js"></script></body></html>`;
+<script id="initial-snapshot" type="application/json">${serialize(snapshot)}</script><script type="module" src="/bootstrap.js"></script></body></html>`;
 }
 
 app.use(express.json({ limit: '16kb' }));
 app.use(express.static(path.join(rootDir, 'public')));
+app.use('/inner-browsing/browser', express.static(browserRuntimeDirectory));
 for (const appletPath of registry.paths()) {
   const definition = registry.get(appletPath);
   app.get(definition.clientModule, (_request, response) => {
@@ -54,13 +59,10 @@ for (const appletPath of registry.paths()) {
   });
 }
 
-app.get('/api/snapshot', (_request, response) => response.json({ ok: true, snapshot: runtime.snapshot() }));
+app.get('/api/snapshot', (_request, response) => response.json({ ok: true, snapshot: protocol.snapshot() }));
 app.post('/api/commands', async (request, response) => {
   try {
-    const { operation, path: appletPath, state = {} } = request.body || {};
-    if (!isComposerOperation(operation)) throw new Error(`Unknown operation: ${operation}`);
-    const envelope = await runtime[operation](appletPath, state);
-    response.json({ ok: true, ...envelope });
+    response.json({ ok: true, ...await protocol.composerCommand(request.body) });
   } catch (error) {
     response.status(400).json({ ok: false, error: error.message });
   }
@@ -68,9 +70,8 @@ app.post('/api/commands', async (request, response) => {
 
 app.get(/^\/(app(?:\/[a-z][a-z0-9-]*)*)$/, async (request, response, next) => {
   try {
-    const appletPath = request.params[0];
-    await runtime.load(appletPath);
-    response.send(page(runtime.snapshot()));
+    await runtime.load(request.params[0]);
+    response.send(page(protocol.snapshot()));
   } catch (error) {
     next(error);
   }
@@ -79,7 +80,7 @@ app.get('/', async (_request, response, next) => {
   try {
     await runtime.load('app/samples/chat');
     await runtime.idle();
-    response.send(page(runtime.snapshot()));
+    response.send(page(protocol.snapshot()));
   } catch (error) {
     next(error);
   }
@@ -87,37 +88,25 @@ app.get('/', async (_request, response, next) => {
 
 io.on('connection', (socket) => {
   socket.on('navigator.subscribe', (_payload = {}, acknowledge = () => {}) => {
-    acknowledge({ ok: true, snapshot: runtime.snapshot() });
+    acknowledge({ ok: true, snapshot: protocol.snapshot() });
   });
   socket.on('navigator.command', async (payload = {}, acknowledge = () => {}) => {
     try {
-      const { operation, path: appletPath, state = {} } = payload;
-      if (!isComposerOperation(operation)) throw new Error(`Unknown operation: ${operation}`);
-      const envelope = await runtime[operation](appletPath, state);
-      acknowledge({
-        ok: true,
-        hash: envelope.hash,
-        projectionHash: envelope.projectionHash,
-        activePaths: envelope.snapshot.activePaths,
-      });
+      acknowledge({ ok: true, ...await protocol.composerCommand(payload) });
     } catch (error) {
       acknowledge({ ok: false, error: error.message });
     }
   });
   socket.on('applet.operation', async (payload = {}, acknowledge = () => {}) => {
     try {
-      const { path: appletPath, operation, data = {} } = payload;
-      const result = await runtime.operate(appletPath, operation, data);
-      acknowledge({ ok: true, ...result });
+      acknowledge({ ok: true, ...await protocol.appletOperation(payload) });
     } catch (error) {
       acknowledge({ ok: false, error: error.message });
     }
   });
   socket.on('projection.operation', async (payload = {}, acknowledge = () => {}) => {
     try {
-      const { projectionKey, operation, data = {} } = payload;
-      const result = await runtime.operateProjection(projectionKey, operation, data);
-      acknowledge({ ok: true, ...result });
+      acknowledge({ ok: true, ...await protocol.projectionOperation(payload) });
     } catch (error) {
       acknowledge({ ok: false, error: error.message });
     }
@@ -129,7 +118,7 @@ app.use((error, _request, response, _next) => {
 });
 
 await runtime.restore();
-server.listen(port, () => {
-  console.log(`Inner Browsing running at http://localhost:${port}`);
+server.listen(port, host, () => {
+  console.log(`Inner Browsing Express + Socket.IO example running at http://${host}:${port}`);
   console.log(`Known applets: ${registry.paths().join(', ')}`);
 });

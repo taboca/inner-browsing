@@ -5,7 +5,7 @@ node_modules/
 coverage/
 *.log
 .DS_Store
-db/state/*
-!db/state/.gitkeep
-db/projections/*
-!db/projections/.gitkeep
+examples/express-socketio-chat/db/state/*
+!examples/express-socketio-chat/db/state/.gitkeep
+examples/express-socketio-chat/db/projections/*
+!examples/express-socketio-chat/db/projections/.gitkeep

@@ -3,12 +3,12 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { createAppletRegistry } from '../src/appletRegistry.js';
-import { createStateTreeStore } from '../src/stateTreeStore.js';
+import { createStateTreeStore } from '../src/node/stateTreeStore.js';
+import { createTestRegistry } from './testRegistry.js';
 
 function fixture() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'inner-browsing-state-'));
-  const registry = createAppletRegistry();
+  const registry = createTestRegistry();
   const store = createStateTreeStore({ stateRoot: directory, registry, now: () => '2026-08-26T00:00:00.000Z' });
   return { directory, store };
 }
@@ -16,13 +16,13 @@ function fixture() {
 test('load creates its lineage and a deterministic Merkle snapshot', () => {
   const { directory, store } = fixture();
   try {
-    const first = store.load('app/samples/chat').snapshot;
-    assert.deepEqual(first.activePaths, ['app', 'app/samples', 'app/samples/chat']);
-    assert.equal(first.roots[0].children[0].children[0].path, 'app/samples/chat');
+    const first = store.load('app/workspace/chat').snapshot;
+    assert.deepEqual(first.activePaths, ['app', 'app/workspace', 'app/workspace/chat']);
+    assert.equal(first.roots[0].children[0].children[0].path, 'app/workspace/chat');
     assert.equal('clientFile' in first.roots[0].children[0].children[0], false);
     assert.match(first.hash, /^[a-f0-9]{64}$/);
     assert.equal(store.snapshot().hash, first.hash);
-    assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'app/samples/root.json'))).present, true);
+    assert.equal(JSON.parse(fs.readFileSync(path.join(directory, 'app/workspace/root.json'))).present, true);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }
@@ -31,12 +31,12 @@ test('load creates its lineage and a deterministic Merkle snapshot', () => {
 test('destroy removes the selected subtree and changes the top hash', () => {
   const { directory, store } = fixture();
   try {
-    const before = store.load('app/samples/chat').snapshot;
-    const result = store.destroy('app/samples');
-    assert.deepEqual(result.removed, ['app/samples/chat', 'app/samples']);
+    const before = store.load('app/workspace/chat').snapshot;
+    const result = store.destroy('app/workspace');
+    assert.deepEqual(result.removed, ['app/workspace/chat', 'app/workspace']);
     assert.deepEqual(result.snapshot.activePaths, ['app']);
     assert.notEqual(result.snapshot.hash, before.hash);
-    assert.equal(fs.existsSync(path.join(directory, 'app/samples')), false);
+    assert.equal(fs.existsSync(path.join(directory, 'app/workspace')), false);
   } finally {
     fs.rmSync(directory, { recursive: true, force: true });
   }

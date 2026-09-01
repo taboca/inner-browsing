@@ -1,25 +1,24 @@
 {
-  "name": "inner-browsing",
-  "version": "0.20.0",
+  "name": "inner-browsing-workspace",
+  "version": "0.0.0",
   "private": true,
   "type": "module",
-  "description": "Context-preserving web navigation through server-directed, lifecycle-managed applet composition.",
-  "author": "Marcio Galli",
-  "license": "AGPL-3.0-or-later",
-  "main": "server.js",
+  "description": "Workspace for @taboca/inner-browsing and its runnable examples.",
   "engines": {
     "node": ">=20"
   },
+  "workspaces": [
+    "packages/*",
+    "examples/*"
+  ],
   "scripts": {
-    "start": "node server.js",
-    "dev": "node --watch server.js",
-    "command": "node commander/index.js",
-    "scenario": "node commander/index.js run",
-    "check": "node --check server.js && find src public commander test -name '*.js' -type f -print0 | xargs -0 -n1 node --check && node --test"
-  },
-  "dependencies": {
-    "express": "^5.1.0",
-    "socket.io": "^4.8.1",
-    "socket.io-client": "^4.8.1"
+    "start": "npm start --workspace @taboca/inner-browsing-example-express-socketio-chat",
+    "dev": "npm run dev --workspace @taboca/inner-browsing-example-express-socketio-chat",
+    "command": "npm run command --workspace @taboca/inner-browsing-example-express-socketio-chat --",
+    "scenario": "npm run scenario --workspace @taboca/inner-browsing-example-express-socketio-chat --",
+    "check": "npm run check --workspaces --if-present",
+    "check:package": "npm run check --workspace @taboca/inner-browsing",
+    "check:example": "npm run check --workspace @taboca/inner-browsing-example-express-socketio-chat",
+    "pack:check": "npm pack --workspace @taboca/inner-browsing --dry-run"
   }
 }

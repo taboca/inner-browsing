@@ -1,6 +1,6 @@
 import fs from 'node:fs/promises';
 import path from 'node:path';
-import { isComposerOperation } from '../src/composerOperations.js';
+import { isComposerOperation } from '@taboca/inner-browsing';
 
 function sameArray(left, right) {
   return left.length === right.length && left.every((value, index) => value === right[index]);

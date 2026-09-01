@@ -3,14 +3,13 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
-import { createRefDoc } from '../public/runtime/refDoc.js';
+import { createAppletRuntime } from '@taboca/inner-browsing';
+import { createRefDoc } from '@taboca/inner-browsing/browser';
+import { createProjectionStore, createStateTreeStore } from '@taboca/inner-browsing/node';
 import { createAppletRegistry } from '../src/appletRegistry.js';
-import { createAppletRuntime } from '../src/appletRuntime.js';
 import { createClientApplet as createChatClient } from '../src/applets/app/applets/samples/applets/chat/client/index.js';
 import { createClientApplet as createPostitClient } from '../src/applets/app/applets/samples/applets/chat/applets/widget-postit/client/index.js';
-import { createProjectionStore } from '../src/projectionStore.js';
 import { createChatMessageStore } from '../src/samples/chatMessageStore.js';
-import { createStateTreeStore } from '../src/stateTreeStore.js';
 
 class FakeElement {
   constructor(tagName) {

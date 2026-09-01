@@ -1,0 +1,45 @@
+{
+  "name": "@taboca/inner-browsing",
+  "version": "0.20.0",
+  "description": "Server-directed, lifecycle-managed applet composition with retained projections.",
+  "keywords": [
+    "applet",
+    "composition",
+    "server-driven-ui",
+    "ui-runtime"
+  ],
+  "type": "module",
+  "license": "AGPL-3.0-or-later",
+  "author": "Marcio Galli",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/taboca/inner-browsing.git",
+    "directory": "packages/inner-browsing"
+  },
+  "homepage": "https://github.com/taboca/inner-browsing#readme",
+  "bugs": "https://github.com/taboca/inner-browsing/issues",
+  "engines": {
+    "node": ">=20"
+  },
+  "exports": {
+    ".": "./src/core/index.js",
+    "./core": "./src/core/index.js",
+    "./browser": "./src/browser/index.js",
+    "./browser/*": "./src/browser/*",
+    "./node": "./src/node/index.js",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "src",
+    "README.md",
+    "LICENSE"
+  ],
+  "sideEffects": false,
+  "publishConfig": {
+    "access": "public"
+  },
+  "scripts": {
+    "check": "node --check src/core/index.js && find src test -name '*.js' -type f -print0 | xargs -0 -n1 node --check && node --test test/*.test.js",
+    "prepack": "npm run check"
+  }
+}

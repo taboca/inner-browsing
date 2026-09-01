@@ -3,11 +3,10 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import test from 'node:test';
+import { createAppletRuntime } from '@taboca/inner-browsing';
+import { createProjectionStore, createStateTreeStore } from '@taboca/inner-browsing/node';
 import { createAppletRegistry } from '../src/appletRegistry.js';
-import { createAppletRuntime } from '../src/appletRuntime.js';
-import { createProjectionStore } from '../src/projectionStore.js';
 import { createChatMessageStore } from '../src/samples/chatMessageStore.js';
-import { createStateTreeStore } from '../src/stateTreeStore.js';
 
 function fixture() {
   const directory = fs.mkdtempSync(path.join(os.tmpdir(), 'inner-browsing-runtime-'));
